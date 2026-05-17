@@ -1,0 +1,123 @@
+@import "tailwindcss";
+
+:root {
+  --background: #1C1008;
+  --foreground: #F5E6C8;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-wood-dark: #3B1F0E;
+  --color-wood-mid: #6B3A1F;
+  --color-wood-light: #8B5E3C;
+  --color-wood-plank: #7A4F2A;
+  --color-wall: #1C1008;
+  --color-ambient: #F5E6C8;
+  --color-amber: #D4A55A;
+  --color-parchment: #F2E8D0;
+  --color-ink: #2C1810;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+/* ── Book spine ─────────────────────────────── */
+.book-spine {
+  width: 30px;
+  min-height: 120px;
+  border-radius: 2px 2px 0 0;
+  border-left: 1px solid rgba(0, 0, 0, 0.25);
+  border-right: 1px solid rgba(0, 0, 0, 0.3);
+  border-top: 1px solid rgba(0, 0, 0, 0.2);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  flex-shrink: 0;
+}
+
+.book-spine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.14) 0%,
+    transparent 30%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.book-spine:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+}
+
+.spine-title {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  max-inline-size: 80%;
+  padding: 6px 4px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+
+/* ── Shelf plank ─────────────────────────────── */
+.shelf-plank {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 0 16px;
+  margin-bottom: 32px;
+}
+
+.shelf-plank::after {
+  content: '';
+  position: absolute;
+  bottom: -16px;
+  left: -4px;
+  right: -4px;
+  height: 16px;
+  background: linear-gradient(
+    to bottom,
+    #8B5E3C 0%,
+    #6B3A1F 55%,
+    #4A2410 100%
+  );
+  border-radius: 0 0 3px 3px;
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.55);
+}
+
+/* ── Library scrollbar ───────────────────────── */
+.library-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.library-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+.library-scroll::-webkit-scrollbar-thumb {
+  background: #6B3A1F;
+  border-radius: 4px;
+}
+.library-scroll::-webkit-scrollbar-thumb:hover {
+  background: #8B5E3C;
+}

@@ -1,0 +1,37 @@
+import { clsx, type ClassValue } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+export const SPINE_PALETTE = [
+  '#8B2635', '#2D5A8E', '#4A7C59', '#7B4F8E',
+  '#C4762A', '#2D7D7D', '#8E4A3C', '#4A6B8E',
+  '#6B8E4A', '#8E6B2D', '#3C4A8E', '#8E3C6B',
+  '#5A7A3A', '#8E5A2D', '#5C3D8E', '#6B2D8E',
+]
+
+export function generateSpineColor(googleBooksId: string): string {
+  let hash = 0
+  for (let i = 0; i < googleBooksId.length; i++) {
+    hash = googleBooksId.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return SPINE_PALETTE[Math.abs(hash) % SPINE_PALETTE.length]
+}
+
+export function chunkIntoShelves<T>(arr: T[], size = 10): T[][] {
+  if (arr.length === 0) return [[]]
+  return Array.from(
+    { length: Math.ceil(arr.length / size) },
+    (_, i) => arr.slice(i * size, i * size + size)
+  )
+}
+
+export function spineHeight(pageCount: number | null): number {
+  if (!pageCount) return 140
+  if (pageCount < 200) return 120
+  if (pageCount < 400) return 150
+  if (pageCount < 600) return 170
+  return 185
+}
