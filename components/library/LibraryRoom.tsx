@@ -1,6 +1,6 @@
 "use client"
 import { useState, useCallback, useMemo } from "react"
-import { SectionWithEntries, ShelfEntry, Section, Friendship, Recommendation } from "@/lib/types"
+import { SectionWithEntries, ShelfEntry, Section, Book, Friendship, Recommendation } from "@/lib/types"
 import SectionColumn from "./SectionColumn"
 import BookDetailModal from "./BookDetailModal"
 import AddBookModal from "./AddBookModal"
@@ -9,8 +9,8 @@ import FriendsPanel from "./FriendsPanel"
 import { Plus, BookOpen, LogOut, Layers, Users } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { deleteSection, moveBookToSection, moveToShelf, reorderSection, createRecommendation, removeRecommendation } from "@/lib/mutations"
-import { computeBooksPerShelf } from "@/lib/utils"
+import { deleteSection, moveBookToSection, moveToShelf, reorderSection, createRecommendation, removeRecommendation, addBookFromRecommendation } from "@/lib/mutations"
+import { computeBooksPerShelf, generateSpineColor } from "@/lib/utils"
 
 interface LibraryRoomProps {
   initialSections: SectionWithEntries[]
@@ -250,6 +250,21 @@ export default function LibraryRoom({
       }
     }
   }, [myRecs, userId])
+
+  const handleAddFromRec = useCallback(async (book: Book, sectionId: string) => {
+    const section = sections.find(s => s.id === sectionId)
+    const count = section?.entries.length ?? 0
+    const spineColor = generateSpineColor(book.google_books_id)
+    // Throws DuplicateBookError on conflict — let the caller (RecCard) handle it
+    const entry = await addBookFromRecommendation(book.id, sectionId, userId, count, spineColor)
+    setSections(prev => prev.map(s =>
+      s.id === sectionId ? { ...s, entries: sortEntries([...s.entries, entry]) } : s
+    ))
+    setUnfilteredOrder(prev => ({
+      ...prev,
+      [sectionId]: [...(prev[sectionId] ?? []), entry.id],
+    }))
+  }, [sections, userId])
 
   const handleSignOut = async () => {
     const supabase = createClient()
@@ -659,6 +674,8 @@ export default function LibraryRoom({
           initialRecs={initialFriendsRecs}
           initialFriends={initialFriends}
           initialPending={initialPendingRequests}
+          sections={sections}
+          onAddToLibrary={handleAddFromRec}
           onClose={() => setShowFriendsPanel(false)}
         />
       )}

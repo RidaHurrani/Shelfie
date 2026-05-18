@@ -1,13 +1,14 @@
 "use client"
 import { useState, useEffect } from "react"
-import { X, Users, Search, UserPlus, Check, BookOpen, UserMinus } from "lucide-react"
-import { Friendship, Recommendation, Profile } from "@/lib/types"
+import { X, Users, Search, UserPlus, Check, BookOpen, UserMinus, BookPlus } from "lucide-react"
+import { Friendship, Recommendation, Profile, Section, Book } from "@/lib/types"
 import StarRating from "./StarRating"
 import {
   sendFriendRequest,
   acceptFriendRequest,
   declineFriendRequest,
   removeFriend,
+  DuplicateBookError,
 } from "@/lib/mutations"
 
 interface FriendsPanelProps {
@@ -15,6 +16,8 @@ interface FriendsPanelProps {
   initialRecs: Recommendation[]
   initialFriends: Friendship[]
   initialPending: Friendship[]
+  sections: Section[]
+  onAddToLibrary: (book: Book, sectionId: string) => Promise<void>
   onClose: () => void
 }
 
@@ -35,6 +38,8 @@ export default function FriendsPanel({
   initialRecs,
   initialFriends,
   initialPending,
+  sections,
+  onAddToLibrary,
   onClose,
 }: FriendsPanelProps) {
   const [tab, setTab] = useState<'feed' | 'friends'>('feed')
@@ -178,7 +183,7 @@ export default function FriendsPanel({
                   </p>
                 </div>
               ) : recs.map(rec => (
-                <RecCard key={rec.id} rec={rec} />
+                <RecCard key={rec.id} rec={rec} sections={sections} onAddToLibrary={onAddToLibrary} />
               ))}
             </div>
           )}
@@ -334,9 +339,41 @@ export default function FriendsPanel({
 
 // ── Rec card ───────────────────────────────────────────────────────────────────
 
-function RecCard({ rec }: { rec: Recommendation }) {
+interface RecCardProps {
+  rec: Recommendation
+  sections: Section[]
+  onAddToLibrary: (book: Book, sectionId: string) => Promise<void>
+}
+
+function RecCard({ rec, sections, onAddToLibrary }: RecCardProps) {
   const name = rec.recommender?.display_name ?? rec.recommender?.email ?? 'Someone'
   const { book } = rec
+
+  const [picking, setPicking]   = useState(false)
+  const [adding, setAdding]     = useState(false)
+  const [added, setAdded]       = useState(false)
+  const [addError, setAddError] = useState('')
+
+  const handlePickSection = async (sectionId: string) => {
+    setAdding(true)
+    setAddError('')
+    try {
+      await onAddToLibrary(book, sectionId)
+      setPicking(false)
+      setAdded(true)
+      setTimeout(() => setAdded(false), 2500)
+    } catch (e) {
+      setPicking(false)
+      if (e instanceof DuplicateBookError) {
+        setAddError('Already on your shelf')
+      } else {
+        setAddError('Failed to add')
+      }
+      setTimeout(() => setAddError(''), 2500)
+    } finally {
+      setAdding(false)
+    }
+  }
 
   return (
     <div
@@ -400,9 +437,72 @@ function RecCard({ rec }: { rec: Recommendation }) {
         </p>
       )}
 
-      <p className="text-[10px] text-[#3B1F0E] text-right mt-2">
-        {timeAgo(rec.created_at)}
-      </p>
+      {/* Footer row: time-ago + Add to Library */}
+      <div className="flex items-center justify-between mt-2">
+        <p className="text-[10px] text-[#3B1F0E]">
+          {timeAgo(rec.created_at)}
+        </p>
+        {added ? (
+          <span className="flex items-center gap-1 text-[10px] text-[#D4A55A]">
+            <Check className="w-3 h-3" /> Added!
+          </span>
+        ) : addError ? (
+          <span className="text-[10px] text-red-400">{addError}</span>
+        ) : (
+          <button
+            onClick={() => setPicking(v => !v)}
+            disabled={adding}
+            className="flex items-center gap-1 text-[10px] transition-colors disabled:opacity-40"
+            style={{ color: picking ? '#D4A55A' : '#6B4020' }}
+            onMouseEnter={e => { if (!picking) e.currentTarget.style.color = '#A08060' }}
+            onMouseLeave={e => { if (!picking) e.currentTarget.style.color = '#6B4020' }}
+            title="Add to your library"
+          >
+            <BookPlus className="w-3 h-3" />
+            {adding ? 'Adding…' : 'Add to library'}
+          </button>
+        )}
+      </div>
+
+      {/* Section picker */}
+      {picking && !adding && (
+        <div
+          className="mt-2 pt-2"
+          style={{ borderTop: '1px solid rgba(74,44,20,0.3)' }}
+        >
+          <p className="text-[10px] text-[#6B4020] mb-1.5 uppercase tracking-wider">Choose a section</p>
+          <div className="flex flex-wrap gap-1.5">
+            {sections.map(s => (
+              <button
+                key={s.id}
+                onClick={() => handlePickSection(s.id)}
+                className="px-2.5 py-1 rounded-full text-[10px] transition-colors"
+                style={{
+                  background: 'rgba(44,24,16,0.8)',
+                  border: '1px solid rgba(74,44,20,0.6)',
+                  color: '#A08060',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor = '#D4A55A'
+                  e.currentTarget.style.color = '#D4A55A'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = 'rgba(74,44,20,0.6)'
+                  e.currentTarget.style.color = '#A08060'
+                }}
+              >
+                {s.name}
+              </button>
+            ))}
+            <button
+              onClick={() => setPicking(false)}
+              className="px-2 py-1 text-[10px] text-[#4A2C14] hover:text-[#6B4020] transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

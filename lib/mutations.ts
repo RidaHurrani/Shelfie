@@ -219,3 +219,33 @@ export async function removeRecommendation(recId: string): Promise<void> {
     .eq('id', recId)
   if (error) throw new Error(error.message)
 }
+
+/** Add a book that already exists in the `books` table directly to a shelf entry.
+ *  Used when adding a friend's recommendation to your own library — skips the
+ *  Google Books upsert step since the book row is already there. */
+export async function addBookFromRecommendation(
+  bookId: string,
+  sectionId: string,
+  userId: string,
+  position: number,
+  spineColor: string
+): Promise<ShelfEntry> {
+  const supabase = createClient()
+  const { data: entry, error } = await supabase
+    .from('shelf_entries')
+    .insert({
+      user_id:    userId,
+      section_id: sectionId,
+      book_id:    bookId,
+      spine_color: spineColor,
+      position,
+      shelf_index: 0,
+    })
+    .select('*, book:books(*)')
+    .single()
+  if (error) {
+    if (error.code === '23505') throw new DuplicateBookError()
+    throw new Error(error.message)
+  }
+  return entry as ShelfEntry
+}
