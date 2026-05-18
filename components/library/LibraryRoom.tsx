@@ -1,19 +1,24 @@
 "use client"
 import { useState, useCallback, useMemo } from "react"
-import { SectionWithEntries, ShelfEntry, Section } from "@/lib/types"
+import { SectionWithEntries, ShelfEntry, Section, Friendship, Recommendation } from "@/lib/types"
 import SectionColumn from "./SectionColumn"
 import BookDetailModal from "./BookDetailModal"
 import AddBookModal from "./AddBookModal"
 import CreateSectionModal from "./CreateSectionModal"
-import { Plus, BookOpen, LogOut, Layers } from "lucide-react"
+import FriendsPanel from "./FriendsPanel"
+import { Plus, BookOpen, LogOut, Layers, Users } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { deleteSection, moveBookToSection, moveToShelf, reorderSection } from "@/lib/mutations"
+import { deleteSection, moveBookToSection, moveToShelf, reorderSection, createRecommendation, removeRecommendation } from "@/lib/mutations"
 import { computeBooksPerShelf } from "@/lib/utils"
 
 interface LibraryRoomProps {
   initialSections: SectionWithEntries[]
   userId: string
+  initialFriendsRecs: Recommendation[]
+  initialFriends: Friendship[]
+  initialPendingRequests: Friendship[]
+  initialMyRecs: Pick<Recommendation, 'id' | 'book_id'>[]
 }
 
 function sortEntries(entries: ShelfEntry[]): ShelfEntry[] {
@@ -24,7 +29,14 @@ function sortEntries(entries: ShelfEntry[]): ShelfEntry[] {
   })
 }
 
-export default function LibraryRoom({ initialSections, userId }: LibraryRoomProps) {
+export default function LibraryRoom({
+  initialSections,
+  userId,
+  initialFriendsRecs,
+  initialFriends,
+  initialPendingRequests,
+  initialMyRecs,
+}: LibraryRoomProps) {
   const router = useRouter()
   const [sections, setSections] = useState<SectionWithEntries[]>(initialSections)
   const [selectedEntry, setSelectedEntry] = useState<ShelfEntry | null>(null)
@@ -42,6 +54,11 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
   // Keyed by sectionId → ordered array of entry IDs.
   // Filtered-view reorders never touch this; only unfiltered-view DnD and
   // add/remove operations update it.
+  // ── Social state ─────────────────────────────────────────────────────────────
+  const [showFriendsPanel, setShowFriendsPanel] = useState(false)
+  const [friends]        = useState<Friendship[]>(initialFriends)
+  const [myRecs, setMyRecs] = useState<Pick<Recommendation, 'id' | 'book_id'>[]>(initialMyRecs)
+
   const [unfilteredOrder, setUnfilteredOrder] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(
       initialSections.map(s => [
@@ -213,6 +230,26 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
       return { ...section, entries }
     })
   }, [activeSectionId, sections, unfilteredOrder, columnWidths])
+
+  const handleRecommendToggle = useCallback(async (entry: ShelfEntry) => {
+    const existing = myRecs.find(r => r.book_id === entry.book_id)
+    if (existing) {
+      setMyRecs(prev => prev.filter(r => r.id !== existing.id))
+      try {
+        await removeRecommendation(existing.id)
+      } catch (e) {
+        setMyRecs(prev => [...prev, existing])
+        console.error('Remove recommendation failed', e)
+      }
+    } else {
+      try {
+        const rec = await createRecommendation(userId, entry.book_id, entry.user_rating)
+        setMyRecs(prev => [...prev, rec])
+      } catch (e) {
+        console.error('Create recommendation failed', e)
+      }
+    }
+  }, [myRecs, userId])
 
   const handleSignOut = async () => {
     const supabase = createClient()
@@ -522,6 +559,26 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
               New Section
             </button>
           )}
+          {/* Friends panel toggle */}
+          <button
+            onClick={() => setShowFriendsPanel(v => !v)}
+            className="relative p-2 transition-colors"
+            style={{ color: showFriendsPanel ? '#D4A55A' : '#6B4020' }}
+            onMouseEnter={e => { if (!showFriendsPanel) e.currentTarget.style.color = '#A08060' }}
+            onMouseLeave={e => { if (!showFriendsPanel) e.currentTarget.style.color = '#6B4020' }}
+            title="Friends & Recommendations"
+          >
+            <Users className="w-4 h-4" />
+            {initialPendingRequests.length > 0 && (
+              <span
+                className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full text-white text-[8px] flex items-center justify-center font-bold"
+                style={{ background: '#8B2635' }}
+              >
+                {initialPendingRequests.length}
+              </span>
+            )}
+          </button>
+
           <button
             onClick={handleSignOut}
             className="p-2 text-[#6B4020] hover:text-[#A08060] transition-colors"
@@ -595,6 +652,17 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
         </div>
       </div>
 
+      {/* Friends panel */}
+      {showFriendsPanel && (
+        <FriendsPanel
+          userId={userId}
+          initialRecs={initialFriendsRecs}
+          initialFriends={initialFriends}
+          initialPending={initialPendingRequests}
+          onClose={() => setShowFriendsPanel(false)}
+        />
+      )}
+
       {/* Modals */}
       {selectedEntry && (
         <BookDetailModal
@@ -603,6 +671,9 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
           onRatingChange={handleRatingChange}
           onRemove={handleBookRemoved}
           onEntryUpdated={handleEntryUpdated}
+          hasFriends={friends.length > 0}
+          isRecommended={myRecs.some(r => r.book_id === selectedEntry.book_id)}
+          onRecommendToggle={() => handleRecommendToggle(selectedEntry)}
         />
       )}
 

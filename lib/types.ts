@@ -40,6 +40,35 @@ export interface SectionWithEntries extends Section {
   entries: ShelfEntry[]
 }
 
+// ── Social / Friends ──────────────────────────────────────────────────────────
+
+export interface Profile {
+  id: string
+  email: string
+  display_name: string | null
+  created_at: string
+}
+
+export interface Friendship {
+  id: string
+  user_id: string
+  friend_id: string
+  status: 'pending' | 'accepted'
+  created_at: string
+  profile: Profile   // the OTHER person's profile (populated in queries)
+}
+
+export interface Recommendation {
+  id: string
+  user_id: string
+  book_id: string
+  user_rating: number | null
+  note: string | null
+  created_at: string
+  book: Book
+  recommender?: Profile  // present for friends' recs; absent for own
+}
+
 export interface GoogleBookResult {
   id: string
   title: string

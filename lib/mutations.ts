@@ -1,5 +1,5 @@
 import { createClient } from './supabase/client'
-import { GoogleBookResult, ShelfEntry } from './types'
+import { GoogleBookResult, ShelfEntry, Recommendation } from './types'
 
 export class DuplicateBookError extends Error {
   constructor() { super('This book is already on this shelf') }
@@ -155,5 +155,67 @@ export async function deleteSection(sectionId: string) {
     .from('sections')
     .delete()
     .eq('id', sectionId)
+  if (error) throw new Error(error.message)
+}
+
+// ── Social / Friends mutations ─────────────────────────────────────────────────
+
+export async function sendFriendRequest(userId: string, toUserId: string): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('friendships')
+    .insert({ user_id: userId, friend_id: toUserId })
+  if (error) throw new Error(error.message)
+}
+
+export async function acceptFriendRequest(friendshipId: string): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('friendships')
+    .update({ status: 'accepted' })
+    .eq('id', friendshipId)
+  if (error) throw new Error(error.message)
+}
+
+export async function declineFriendRequest(friendshipId: string): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('friendships')
+    .delete()
+    .eq('id', friendshipId)
+  if (error) throw new Error(error.message)
+}
+
+export async function removeFriend(friendshipId: string): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('friendships')
+    .delete()
+    .eq('id', friendshipId)
+  if (error) throw new Error(error.message)
+}
+
+export async function createRecommendation(
+  userId: string,
+  bookId: string,
+  rating: number | null,
+  note?: string
+): Promise<Pick<Recommendation, 'id' | 'book_id'>> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('recommendations')
+    .insert({ user_id: userId, book_id: bookId, user_rating: rating, note: note ?? null })
+    .select('id, book_id')
+    .single()
+  if (error) throw new Error(error.message)
+  return data as Pick<Recommendation, 'id' | 'book_id'>
+}
+
+export async function removeRecommendation(recId: string): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('recommendations')
+    .delete()
+    .eq('id', recId)
   if (error) throw new Error(error.message)
 }

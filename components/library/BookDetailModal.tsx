@@ -4,7 +4,7 @@ import { ShelfEntry } from "@/lib/types"
 import StarRating from "./StarRating"
 import { updateRating, removeBookFromShelf, updateShelfEntry } from "@/lib/mutations"
 import { SPINE_PALETTE, generateSpineColor } from "@/lib/utils"
-import { X, Trash2, BookOpen, Pencil, Check } from "lucide-react"
+import { X, Trash2, BookOpen, Pencil, Check, Heart } from "lucide-react"
 import Image from "next/image"
 
 interface BookDetailModalProps {
@@ -13,6 +13,10 @@ interface BookDetailModalProps {
   onRatingChange: (entryId: string, rating: number) => void
   onRemove: (entryId: string) => void
   onEntryUpdated: (entryId: string, spineColor: string, customTitle: string | null, seriesName: string | null) => void
+  // Social
+  hasFriends?: boolean
+  isRecommended?: boolean
+  onRecommendToggle?: () => void
 }
 
 export default function BookDetailModal({
@@ -21,6 +25,9 @@ export default function BookDetailModal({
   onRatingChange,
   onRemove,
   onEntryUpdated,
+  hasFriends = false,
+  isRecommended = false,
+  onRecommendToggle,
 }: BookDetailModalProps) {
   const [saving, setSaving] = useState(false)
   const [removing, setRemoving] = useState(false)
@@ -146,6 +153,24 @@ export default function BookDetailModal({
               <div className="mt-auto">
                 <p className="text-xs text-[#6B4020] mb-2">{saving ? "Saving..." : "Your rating"}</p>
                 <StarRating value={entry.user_rating} onChange={handleRate} />
+
+                {hasFriends && (
+                  <button
+                    onClick={onRecommendToggle}
+                    className="flex items-center gap-1.5 mt-3 text-xs transition-colors"
+                    style={{
+                      color: isRecommended ? '#D4A55A' : '#4A2C14',
+                    }}
+                    onMouseEnter={e => { if (!isRecommended) e.currentTarget.style.color = '#A08060' }}
+                    onMouseLeave={e => { if (!isRecommended) e.currentTarget.style.color = '#4A2C14' }}
+                  >
+                    <Heart
+                      className="w-3.5 h-3.5"
+                      fill={isRecommended ? '#D4A55A' : 'none'}
+                    />
+                    {isRecommended ? 'Recommended ✓' : 'Recommend to friends'}
+                  </button>
+                )}
               </div>
             </div>
           </div>
