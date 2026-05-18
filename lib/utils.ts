@@ -33,6 +33,19 @@ export function computeBooksPerShelf(columnWidth: number): number {
   return Math.max(1, Math.floor((columnWidth - 32) / 34))
 }
 
+export type ReadingStatus = 'want_to_read' | 'reading' | 'read'
+
+export const READING_STATUSES: {
+  value: ReadingStatus
+  label: string
+  color: string
+  bg: string
+}[] = [
+  { value: 'want_to_read', label: 'Want to Read', color: '#A08060', bg: 'rgba(74,44,20,0.4)'    },
+  { value: 'reading',      label: 'Reading',       color: '#D4A55A', bg: 'rgba(212,165,90,0.2)' },
+  { value: 'read',         label: 'Read',           color: '#4A7C59', bg: 'rgba(74,124,89,0.25)' },
+]
+
 export function spineHeight(pageCount: number | null): number {
   if (!pageCount) return 140
   if (pageCount < 200) return 120

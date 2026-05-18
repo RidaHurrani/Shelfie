@@ -12,7 +12,8 @@ export async function addBookToSection(
   currentCount: number,
   spineColor: string,
   seriesName?: string | null,
-  shelfIndex: number = 0
+  shelfIndex: number = 0,
+  readingStatus: string = 'want_to_read'
 ) {
   const supabase = createClient()
 
@@ -60,6 +61,7 @@ export async function addBookToSection(
       position: currentCount,
       series_name: seriesName || null,
       shelf_index: shelfIndex,
+      reading_status: readingStatus,
     })
     .select('*, book:books(*)')
     .single()
@@ -106,7 +108,8 @@ export async function updateShelfEntry(
   entryId: string,
   spineColor: string,
   customTitle: string | null,
-  seriesName?: string | null
+  seriesName?: string | null,
+  readingStatus?: string
 ) {
   const supabase = createClient()
   const { error } = await supabase
@@ -115,6 +118,7 @@ export async function updateShelfEntry(
       spine_color: spineColor,
       custom_title: customTitle || null,
       series_name: seriesName !== undefined ? (seriesName || null) : undefined,
+      ...(readingStatus !== undefined && { reading_status: readingStatus }),
     })
     .eq('id', entryId)
   if (error) throw new Error(error.message)
@@ -228,7 +232,8 @@ export async function addBookFromRecommendation(
   sectionId: string,
   userId: string,
   position: number,
-  spineColor: string
+  spineColor: string,
+  readingStatus: string = 'want_to_read'
 ): Promise<ShelfEntry> {
   const supabase = createClient()
   const { data: entry, error } = await supabase
@@ -240,6 +245,7 @@ export async function addBookFromRecommendation(
       spine_color: spineColor,
       position,
       shelf_index: 0,
+      reading_status: readingStatus,
     })
     .select('*, book:books(*)')
     .single()

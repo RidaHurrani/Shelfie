@@ -32,6 +32,7 @@ export interface ShelfEntry {
   spine_color: string | null
   custom_title: string | null
   series_name: string | null
+  reading_status: 'want_to_read' | 'reading' | 'read' | null
   shelf_index: number
   book: Book
 }

@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { GoogleBookResult, ShelfEntry } from "@/lib/types"
 import { addBookToSection, DuplicateBookError } from "@/lib/mutations"
-import { SPINE_PALETTE, generateSpineColor } from "@/lib/utils"
+import { SPINE_PALETTE, generateSpineColor, READING_STATUSES, ReadingStatus } from "@/lib/utils"
 import { Search, X, BookOpen, Loader2, Check } from "lucide-react"
 import Image from "next/image"
 
@@ -34,6 +34,7 @@ export default function AddBookModal({
   const [pendingBook, setPendingBook] = useState<GoogleBookResult | null>(null)
   const [selectedSpine, setSelectedSpine] = useState<string>("")
   const [seriesName, setSeriesName] = useState("")
+  const [readingStatus, setReadingStatus] = useState<ReadingStatus>('want_to_read')
 
   const inputRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -75,6 +76,7 @@ export default function AddBookModal({
     setPendingBook(book)
     setSelectedSpine(book.thumbnail ? 'cover' : generateSpineColor(book.id))
     setSeriesName("")
+    setReadingStatus('want_to_read')
   }
 
   const handleConfirmAdd = async () => {
@@ -89,7 +91,8 @@ export default function AddBookModal({
         currentCount,
         selectedSpine,
         seriesName.trim() || null,
-        targetShelfIndex
+        targetShelfIndex,
+        readingStatus
       )
       onBookAdded(sectionId, entry)
     } catch (e) {
@@ -321,6 +324,27 @@ export default function AddBookModal({
                       placeholder="e.g. The Stormlight Archive"
                       className="w-full bg-[#0E0804] border border-[#4A2C14] text-[#F5E6C8] rounded-lg px-3 py-2 text-sm placeholder-[#4A2C14] focus:outline-none focus:border-[#D4A55A] transition-colors"
                     />
+                  </div>
+
+                  {/* Reading status */}
+                  <div className="mt-4">
+                    <label className="text-xs text-[#A08060] block mb-2 uppercase tracking-wider">Status</label>
+                    <div className="flex gap-2 flex-wrap">
+                      {READING_STATUSES.map(s => (
+                        <button
+                          key={s.value}
+                          onClick={() => setReadingStatus(s.value)}
+                          className="px-3 py-1 rounded-full text-xs font-medium transition-all"
+                          style={{
+                            background: readingStatus === s.value ? s.bg : 'transparent',
+                            color: readingStatus === s.value ? s.color : '#4A2C14',
+                            border: `1px solid ${readingStatus === s.value ? s.color : 'rgba(74,44,20,0.4)'}`,
+                          }}
+                        >
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Confirm button */}

@@ -372,17 +372,17 @@ export default function LibraryRoom({
   }, [])
 
   const handleEntryUpdated = useCallback(
-    (entryId: string, spineColor: string, customTitle: string | null, seriesName: string | null) => {
+    (entryId: string, spineColor: string, customTitle: string | null, seriesName: string | null, readingStatus: string) => {
       setSections((prev) =>
         prev.map((s) => ({
           ...s,
           entries: s.entries.map((e) =>
-            e.id === entryId ? { ...e, spine_color: spineColor, custom_title: customTitle, series_name: seriesName } : e
+            e.id === entryId ? { ...e, spine_color: spineColor, custom_title: customTitle, series_name: seriesName, reading_status: readingStatus as ShelfEntry['reading_status'] } : e
           ),
         }))
       )
       setSelectedEntry((prev) =>
-        prev?.id === entryId ? { ...prev, spine_color: spineColor, custom_title: customTitle, series_name: seriesName } : prev
+        prev?.id === entryId ? { ...prev, spine_color: spineColor, custom_title: customTitle, series_name: seriesName, reading_status: readingStatus as ShelfEntry['reading_status'] } : prev
       )
     },
     []

@@ -3,7 +3,7 @@ import { useState } from "react"
 import { ShelfEntry } from "@/lib/types"
 import StarRating from "./StarRating"
 import { updateRating, removeBookFromShelf, updateShelfEntry } from "@/lib/mutations"
-import { SPINE_PALETTE, generateSpineColor } from "@/lib/utils"
+import { SPINE_PALETTE, generateSpineColor, READING_STATUSES, ReadingStatus } from "@/lib/utils"
 import { X, Trash2, BookOpen, Pencil, Check, Heart } from "lucide-react"
 import Image from "next/image"
 
@@ -12,7 +12,7 @@ interface BookDetailModalProps {
   onClose: () => void
   onRatingChange: (entryId: string, rating: number) => void
   onRemove: (entryId: string) => void
-  onEntryUpdated: (entryId: string, spineColor: string, customTitle: string | null, seriesName: string | null) => void
+  onEntryUpdated: (entryId: string, spineColor: string, customTitle: string | null, seriesName: string | null, readingStatus: string) => void
   // Social
   hasFriends?: boolean
   isRecommended?: boolean
@@ -37,6 +37,7 @@ export default function BookDetailModal({
   const [editSpine, setEditSpine] = useState(entry.spine_color ?? generateSpineColor(entry.book.google_books_id))
   const [editTitle, setEditTitle] = useState(entry.custom_title ?? entry.book.title)
   const [editSeries, setEditSeries] = useState(entry.series_name ?? "")
+  const [editStatus, setEditStatus] = useState<ReadingStatus>((entry.reading_status as ReadingStatus) ?? 'want_to_read')
   const [savingEdit, setSavingEdit] = useState(false)
   const [editError, setEditError] = useState("")
 
@@ -72,8 +73,8 @@ export default function BookDetailModal({
     try {
       const customTitle = editTitle.trim() === book.title ? null : editTitle.trim() || null
       const seriesName = editSeries.trim() || null
-      await updateShelfEntry(entry.id, editSpine, customTitle, seriesName)
-      onEntryUpdated(entry.id, editSpine, customTitle, seriesName)
+      await updateShelfEntry(entry.id, editSpine, customTitle, seriesName, editStatus)
+      onEntryUpdated(entry.id, editSpine, customTitle, seriesName, editStatus)
       setIsEditing(false)
     } catch (e) {
       setEditError(e instanceof Error ? e.message : "Failed to save")
@@ -86,6 +87,7 @@ export default function BookDetailModal({
     setEditSpine(entry.spine_color ?? generateSpineColor(entry.book.google_books_id))
     setEditTitle(entry.custom_title ?? book.title)
     setEditSeries(entry.series_name ?? "")
+    setEditStatus((entry.reading_status as ReadingStatus) ?? 'want_to_read')
     setEditError("")
     setIsEditing(false)
   }
@@ -140,6 +142,17 @@ export default function BookDetailModal({
               {entry.series_name && (
                 <p className="text-xs text-[#A08060] mb-2 italic">{entry.series_name}</p>
               )}
+              {(() => {
+                const s = READING_STATUSES.find(x => x.value === (entry.reading_status ?? 'want_to_read'))
+                return s ? (
+                  <span
+                    className="inline-block mb-3 px-2.5 py-0.5 rounded-full text-[11px] font-medium"
+                    style={{ background: s.bg, color: s.color, border: `1px solid ${s.color}` }}
+                  >
+                    {s.label}
+                  </span>
+                ) : null
+              })()}
               <div className="flex flex-wrap items-center gap-3 text-xs text-[#6B4020] mb-4">
                 {book.published_year && <span>{book.published_year}</span>}
                 {book.page_count && <span>{book.page_count} pages</span>}
@@ -215,6 +228,27 @@ export default function BookDetailModal({
                 placeholder="e.g. The Stormlight Archive"
                 className="w-full bg-[#0E0804] border border-[#4A2C14] text-[#F5E6C8] rounded-lg px-4 py-2.5 text-sm placeholder-[#4A2C14] focus:outline-none focus:border-[#D4A55A] transition-colors"
               />
+            </div>
+
+            {/* Reading status */}
+            <div className="mb-5">
+              <label className="text-xs text-[#A08060] block mb-2 uppercase tracking-wider">Status</label>
+              <div className="flex gap-2 flex-wrap">
+                {READING_STATUSES.map(s => (
+                  <button
+                    key={s.value}
+                    onClick={() => setEditStatus(s.value)}
+                    className="px-3 py-1 rounded-full text-xs font-medium transition-all"
+                    style={{
+                      background: editStatus === s.value ? s.bg : 'transparent',
+                      color: editStatus === s.value ? s.color : '#4A2C14',
+                      border: `1px solid ${editStatus === s.value ? s.color : 'rgba(74,44,20,0.4)'}`,
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Spine style picker */}
