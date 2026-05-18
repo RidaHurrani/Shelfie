@@ -10,6 +10,7 @@ interface AddBookModalProps {
   sectionId: string
   userId: string
   currentCount: number
+  targetShelfIndex?: number
   onClose: () => void
   onBookAdded: (sectionId: string, entry: ShelfEntry) => void
 }
@@ -18,6 +19,7 @@ export default function AddBookModal({
   sectionId,
   userId,
   currentCount,
+  targetShelfIndex = 0,
   onClose,
   onBookAdded,
 }: AddBookModalProps) {
@@ -86,7 +88,8 @@ export default function AddBookModal({
         userId,
         currentCount,
         selectedSpine,
-        seriesName.trim() || null
+        seriesName.trim() || null,
+        targetShelfIndex
       )
       onBookAdded(sectionId, entry)
     } catch (e) {
@@ -123,7 +126,7 @@ export default function AddBookModal({
       )}
 
       <div
-        className="w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl flex flex-col"
+        className="modal-panel w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl flex flex-col"
         style={{ background: '#1C0E06', border: '1px solid #4A2C14', maxHeight: '85vh' }}
       >
         {/* Search header */}

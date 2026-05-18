@@ -90,7 +90,7 @@ export default function BookDetailModal({
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="relative w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl"
+        className="modal-panel relative w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl"
         style={{ background: '#1C0E06', border: '1px solid #4A2C14' }}
       >
         {/* Close */}

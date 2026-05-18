@@ -11,7 +11,8 @@ export async function addBookToSection(
   userId: string,
   currentCount: number,
   spineColor: string,
-  seriesName?: string | null
+  seriesName?: string | null,
+  shelfIndex: number = 0
 ) {
   const supabase = createClient()
 
@@ -58,6 +59,7 @@ export async function addBookToSection(
       spine_color: spineColor,
       position: currentCount,
       series_name: seriesName || null,
+      shelf_index: shelfIndex,
     })
     .select('*, book:books(*)')
     .single()
@@ -114,6 +116,15 @@ export async function updateShelfEntry(
       custom_title: customTitle || null,
       series_name: seriesName !== undefined ? (seriesName || null) : undefined,
     })
+    .eq('id', entryId)
+  if (error) throw new Error(error.message)
+}
+
+export async function moveToShelf(entryId: string, shelfIndex: number, newPosition: number) {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('shelf_entries')
+    .update({ shelf_index: shelfIndex, position: newPosition })
     .eq('id', entryId)
   if (error) throw new Error(error.message)
 }

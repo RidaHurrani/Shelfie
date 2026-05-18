@@ -28,6 +28,11 @@ export function chunkIntoShelves<T>(arr: T[], size = 10): T[][] {
   )
 }
 
+/** How many 30px book spines (+ 4px gap) fit in the given column width (32px total padding). */
+export function computeBooksPerShelf(columnWidth: number): number {
+  return Math.max(1, Math.floor((columnWidth - 32) / 34))
+}
+
 export function spineHeight(pageCount: number | null): number {
   if (!pageCount) return 140
   if (pageCount < 200) return 120

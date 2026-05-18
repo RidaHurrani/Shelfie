@@ -1,18 +1,27 @@
 "use client"
-import { useState, useCallback } from "react"
+import { useState, useCallback, useMemo } from "react"
 import { SectionWithEntries, ShelfEntry, Section } from "@/lib/types"
 import SectionColumn from "./SectionColumn"
 import BookDetailModal from "./BookDetailModal"
 import AddBookModal from "./AddBookModal"
 import CreateSectionModal from "./CreateSectionModal"
-import { Plus, BookOpen, LogOut } from "lucide-react"
+import { Plus, BookOpen, LogOut, Layers } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { deleteSection, moveBookToSection, reorderSection } from "@/lib/mutations"
+import { deleteSection, moveBookToSection, moveToShelf, reorderSection } from "@/lib/mutations"
+import { computeBooksPerShelf } from "@/lib/utils"
 
 interface LibraryRoomProps {
   initialSections: SectionWithEntries[]
   userId: string
+}
+
+function sortEntries(entries: ShelfEntry[]): ShelfEntry[] {
+  return [...entries].sort((a, b) => {
+    const ai = a.shelf_index ?? 0, bi = b.shelf_index ?? 0
+    if (ai !== bi) return ai - bi
+    return a.position - b.position
+  })
 }
 
 export default function LibraryRoom({ initialSections, userId }: LibraryRoomProps) {
@@ -20,7 +29,190 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
   const [sections, setSections] = useState<SectionWithEntries[]>(initialSections)
   const [selectedEntry, setSelectedEntry] = useState<ShelfEntry | null>(null)
   const [addingToSection, setAddingToSection] = useState<string | null>(null)
+  const [addingToShelf, setAddingToShelf] = useState(0)
   const [showCreateSection, setShowCreateSection] = useState(false)
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
+  const [isVisible, setIsVisible] = useState(true)
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({})
+  const [bookcaseCounts, setBookcaseCounts] = useState<Record<string, number>>({})
+  // Per-bookcase widths for filtered (individual section) view.
+  // Key = sectionId, value = array indexed by bookcase index.
+  const [bookcaseWidths, setBookcaseWidths] = useState<Record<string, number[]>>({})
+  // Independent display order for the unfiltered (all-sections) view.
+  // Keyed by sectionId → ordered array of entry IDs.
+  // Filtered-view reorders never touch this; only unfiltered-view DnD and
+  // add/remove operations update it.
+  const [unfilteredOrder, setUnfilteredOrder] = useState<Record<string, string[]>>(() =>
+    Object.fromEntries(
+      initialSections.map(s => [
+        s.id,
+        sortEntries(s.entries).map(e => e.id),
+      ])
+    )
+  )
+
+  const handleSectionFilter = (id: string | null) => {
+    setIsVisible(false)
+    setTimeout(() => {
+      setActiveSectionId(id)
+      setIsVisible(true)
+    }, 180)
+  }
+
+  // shelf_index in filtered mode = bookcase index (0, 1, 2 …).
+  // Returns how many bookcases should be visible for a section.
+  const getBookcaseCount = useCallback((sectionId: string, entries: { shelf_index: number }[]) => {
+    const maxBookcaseIdx = entries.length > 0
+      ? Math.max(...entries.map(e => e.shelf_index ?? 0))
+      : 0
+    const minFromEntries = maxBookcaseIdx + 1
+    return Math.max(minFromEntries, bookcaseCounts[sectionId] ?? 1)
+  }, [bookcaseCounts])
+
+  const handleAddBookcase = useCallback(() => {
+    if (!activeSectionId) return
+    setSections(prev => prev) // no-op — just need the dependency
+    setBookcaseCounts(prev => {
+      const section = sections.find(s => s.id === activeSectionId)
+      const current = section ? getBookcaseCount(activeSectionId, section.entries) : 1
+      return { ...prev, [activeSectionId]: current + 1 }
+    })
+  }, [activeSectionId, sections, getBookcaseCount])
+
+  const handleDeleteBookcase = useCallback(() => {
+    if (!activeSectionId) return
+    setBookcaseCounts(prev => {
+      const section = sections.find(s => s.id === activeSectionId)
+      const current = section ? getBookcaseCount(activeSectionId, section.entries) : 1
+      return { ...prev, [activeSectionId]: Math.max(1, current - 1) }
+    })
+  }, [activeSectionId, sections, getBookcaseCount])
+
+  const handleWidthChange = useCallback((sectionId: string, width: number) => {
+    setColumnWidths((prev) => ({ ...prev, [sectionId]: width }))
+  }, [])
+
+  const handleBookcaseWidthChange = useCallback((sectionId: string, bookcaseIdx: number, newWidth: number) => {
+    // Always update the width immediately so the bookcase visually reflows.
+    setBookcaseWidths((prev) => {
+      const existing = prev[sectionId] ? [...prev[sectionId]] : []
+      existing[bookcaseIdx] = newWidth
+      return { ...prev, [sectionId]: existing }
+    })
+
+    // ── Overflow redistribution ─────────────────────────────────────────────
+    // If narrowing caused more books than 3 planks can hold, push the excess
+    // to the next bookcase(s) to the right, creating a new one if needed.
+    const section = sections.find(s => s.id === sectionId)
+    if (!section) return
+
+    const newBPS = computeBooksPerShelf(newWidth)
+    const capacity = 3 * newBPS
+
+    const bookcaseBooks = section.entries
+      .filter(e => (e.shelf_index ?? 0) === bookcaseIdx)
+      .sort((a, b) => a.position - b.position)
+
+    if (bookcaseBooks.length <= capacity) return // no overflow — nothing to do
+
+    // Build a mutable per-bookcase array so we can redistribute in memory.
+    const currentCount = getBookcaseCount(sectionId, section.entries)
+
+    // Width helper: use newWidth for the resized bookcase, stored widths for others.
+    const getWidth = (bi: number) =>
+      bi === bookcaseIdx ? newWidth : (bookcaseWidths[sectionId]?.[bi] ?? 340)
+
+    const bcArrays: ShelfEntry[][] = Array.from({ length: currentCount }, (_, bi) =>
+      section.entries
+        .filter(e => (e.shelf_index ?? 0) === bi)
+        .sort((a, b) => a.position - b.position)
+    )
+
+    // Trim the resized bookcase; the excess becomes the overflow to redistribute.
+    const overflow = bcArrays[bookcaseIdx].splice(capacity)
+    let remaining = overflow       // same reference — we'll splice from it
+    let neededCount = currentCount
+
+    for (let ti = bookcaseIdx + 1; remaining.length > 0; ti++) {
+      if (ti >= neededCount) {
+        // No more existing bookcases — create a fresh one.
+        bcArrays.push([])
+        neededCount++
+      }
+      const tiBPS = computeBooksPerShelf(getWidth(ti))
+      const tiCapacity = 3 * tiBPS
+      const tiAvailable = tiCapacity - (bcArrays[ti]?.length ?? 0)
+      if (tiAvailable > 0) {
+        const toMove = remaining.splice(0, tiAvailable)
+        bcArrays[ti] = [...(bcArrays[ti] ?? []), ...toMove]
+      }
+      // If this target is full (tiAvailable <= 0), the loop advances to ti+1.
+    }
+
+    // Compute which entries actually moved (new shelf_index or position).
+    const movedEntries: Array<{ id: string; shelf_index: number; position: number }> = []
+    const updatedEntries = section.entries.map(e => {
+      for (let bi = 0; bi < bcArrays.length; bi++) {
+        const pos = bcArrays[bi].findIndex(be => be.id === e.id)
+        if (pos !== -1) {
+          if ((e.shelf_index ?? 0) !== bi || e.position !== pos) {
+            movedEntries.push({ id: e.id, shelf_index: bi, position: pos })
+            return { ...e, shelf_index: bi, position: pos }
+          }
+          return e
+        }
+      }
+      return e
+    })
+
+    setSections(prev =>
+      prev.map(s => s.id === sectionId ? { ...s, entries: sortEntries(updatedEntries) } : s)
+    )
+
+    if (neededCount > currentCount) {
+      setBookcaseCounts(prev => ({
+        ...prev,
+        [sectionId]: Math.max(prev[sectionId] ?? 1, neededCount),
+      }))
+    }
+
+    // Persist each moved book to the DB.
+    movedEntries.forEach(({ id, shelf_index, position }) => {
+      moveToShelf(id, shelf_index, position).catch(console.error)
+    })
+  }, [sections, bookcaseWidths, getBookcaseCount])
+
+  const handleAddBook = useCallback((sectionId: string, shelfIndex: number) => {
+    setAddingToSection(sectionId)
+    setAddingToShelf(shelfIndex)
+  }, [])
+
+  // In unfiltered mode, compute display entries from unfilteredOrder (independent
+  // of filtered-view bookcase placement).  Virtual shelf_index / position values
+  // are assigned so that existing DnD logic in SectionColumn/BookSpine/Shelf
+  // keeps working correctly (same-row detection, etc.).
+  const displayedSections = useMemo(() => {
+    const base = activeSectionId
+      ? sections.filter(s => s.id === activeSectionId)
+      : sections
+
+    if (activeSectionId) return base   // filtered mode — use raw entries as-is
+
+    return base.map(section => {
+      const order = unfilteredOrder[section.id]
+      if (!order) return section
+      const bps = computeBooksPerShelf(columnWidths[section.id] ?? 340)
+      const entries = order
+        .map(id => section.entries.find(e => e.id === id))
+        .filter((e): e is ShelfEntry => e !== undefined)
+        .map((e, i) => ({
+          ...e,
+          shelf_index: Math.floor(i / bps),  // virtual row for DnD
+          position:    i % bps,
+        }))
+      return { ...section, entries }
+    })
+  }, [activeSectionId, sections, unfilteredOrder, columnWidths])
 
   const handleSignOut = async () => {
     const supabase = createClient()
@@ -33,15 +225,39 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
   }, [])
 
   const handleBookAdded = useCallback((sectionId: string, newEntry: ShelfEntry) => {
-    setSections((prev) =>
-      prev.map((s) =>
+    setSections((prev) => {
+      const updated = prev.map((s) =>
         s.id === sectionId
-          ? { ...s, entries: [...s.entries, newEntry] }
+          ? { ...s, entries: sortEntries([...s.entries, newEntry]) }
           : s
       )
-    )
+      // Auto-add a new bookcase if the bookcase the book landed in is now full.
+      // shelf_index on the entry IS the bookcase index in filtered mode.
+      const section = updated.find(s => s.id === sectionId)
+      if (section) {
+        const bookcaseIdx = newEntry.shelf_index ?? 0
+        // In filtered mode each bookcase has its own width; fall back to section width or default.
+        const w = bookcaseWidths[sectionId]?.[bookcaseIdx]
+          ?? columnWidths[sectionId]
+          ?? 340
+        const bps = computeBooksPerShelf(w)
+        const bookcaseBookCount = section.entries.filter(e => (e.shelf_index ?? 0) === bookcaseIdx).length
+        if (bookcaseBookCount >= 3 * bps) {
+          setBookcaseCounts(prev => ({
+            ...prev,
+            [sectionId]: Math.max(prev[sectionId] ?? 1, bookcaseIdx + 2),
+          }))
+        }
+      }
+      return updated
+    })
+    // Append new book at the end of the unfiltered display order.
+    setUnfilteredOrder(prev => ({
+      ...prev,
+      [sectionId]: [...(prev[sectionId] ?? []), newEntry.id],
+    }))
     setAddingToSection(null)
-  }, [])
+  }, [columnWidths])
 
   const handleRatingChange = useCallback((entryId: string, rating: number) => {
     setSections((prev) =>
@@ -58,6 +274,17 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
   }, [])
 
   const handleBookRemoved = useCallback((entryId: string) => {
+    // Remove from unfiltered order (search all sections).
+    setUnfilteredOrder(prev => {
+      const updated = { ...prev }
+      for (const sid of Object.keys(updated)) {
+        if (updated[sid].includes(entryId)) {
+          updated[sid] = updated[sid].filter(id => id !== entryId)
+          break
+        }
+      }
+      return updated
+    })
     setSections((prev) =>
       prev.map((s) => ({
         ...s,
@@ -100,8 +327,41 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
 
   const handleReorderInSection = useCallback(
     async (sectionId: string, reorderedEntries: ShelfEntry[]) => {
+      if (!activeSectionId) {
+        // ── Unfiltered view reorder ──────────────────────────────────────────
+        // Only update the in-memory display order; never touch DB positions or
+        // shelf_index (those belong to the filtered-view bookcase layout).
+        const reorderedIds = reorderedEntries.map(e => e.id)
+        const reorderedSet = new Set(reorderedIds)
+        setUnfilteredOrder(prev => {
+          const cur = prev[sectionId] ?? []
+          // Find where this group sits in the current order
+          const firstIdx = cur.findIndex(id => reorderedSet.has(id))
+          const without   = cur.filter(id => !reorderedSet.has(id))
+          const insertAt  = firstIdx >= 0 ? firstIdx : without.length
+          return {
+            ...prev,
+            [sectionId]: [
+              ...without.slice(0, insertAt),
+              ...reorderedIds,
+              ...without.slice(insertAt),
+            ],
+          }
+        })
+        return
+      }
+
+      // ── Filtered view reorder ────────────────────────────────────────────
+      // Update real shelf_index/position in sections state and persist to DB.
+      // unfilteredOrder is intentionally NOT touched here.
+      const shelfIdx = reorderedEntries[0]?.shelf_index ?? 0
       setSections((prev) =>
-        prev.map((s) => (s.id === sectionId ? { ...s, entries: reorderedEntries } : s))
+        prev.map((s) => {
+          if (s.id !== sectionId) return s
+          const otherEntries = s.entries.filter((e) => (e.shelf_index ?? 0) !== shelfIdx)
+          const withPositions = reorderedEntries.map((e, i) => ({ ...e, position: i }))
+          return { ...s, entries: sortEntries([...otherEntries, ...withPositions]) }
+        })
       )
       try {
         await reorderSection(reorderedEntries.map((e, i) => ({ id: e.id, position: i })))
@@ -109,12 +369,60 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
         console.error('Reorder failed', e)
       }
     },
-    []
+    [activeSectionId]
+  )
+
+  const handleMoveToShelf = useCallback(
+    async (sectionId: string, entryId: string, targetShelfIndex: number, newPosition: number) => {
+      if (!activeSectionId) {
+        // ── Unfiltered view cross-row drop ───────────────────────────────────
+        // targetShelfIndex is a virtual row index; only update display order.
+        const bps = computeBooksPerShelf(columnWidths[sectionId] ?? 340)
+        setUnfilteredOrder(prev => {
+          const cur    = prev[sectionId] ?? []
+          const without = cur.filter(id => id !== entryId)
+          // Insert at the logical position within the target row
+          const insertAt = Math.min(targetShelfIndex * bps + newPosition, without.length)
+          return {
+            ...prev,
+            [sectionId]: [
+              ...without.slice(0, insertAt),
+              entryId,
+              ...without.slice(insertAt),
+            ],
+          }
+        })
+        return
+      }
+
+      // ── Filtered view cross-bookcase drop ────────────────────────────────
+      setSections((prev) =>
+        prev.map((s) => {
+          if (s.id !== sectionId) return s
+          const updated = s.entries.map((e) =>
+            e.id === entryId ? { ...e, shelf_index: targetShelfIndex, position: newPosition } : e
+          )
+          return { ...s, entries: sortEntries(updated) }
+        })
+      )
+      try {
+        await moveToShelf(entryId, targetShelfIndex, newPosition)
+      } catch (e) {
+        console.error('Move to shelf failed', e)
+      }
+    },
+    [activeSectionId, columnWidths]
   )
 
   const handleBookMoved = useCallback(
     async (entryId: string, fromSectionId: string, toSectionId: string) => {
-      // Find the entry being moved
+      // Move in unfiltered order: remove from source section, append to dest.
+      setUnfilteredOrder(prev => ({
+        ...prev,
+        [fromSectionId]: (prev[fromSectionId] ?? []).filter(id => id !== entryId),
+        [toSectionId]:   [...(prev[toSectionId] ?? []), entryId],
+      }))
+
       let movedEntry: ShelfEntry | undefined
       setSections((prev) => {
         const fromSection = prev.find((s) => s.id === fromSectionId)
@@ -124,18 +432,22 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
         const newPosition = toSection ? toSection.entries.length : 0
         return prev.map((s) => {
           if (s.id === fromSectionId) return { ...s, entries: s.entries.filter((e) => e.id !== entryId) }
-          if (s.id === toSectionId) return { ...s, entries: [...s.entries, { ...movedEntry!, section_id: toSectionId, position: newPosition }] }
+          if (s.id === toSectionId) return { ...s, entries: [...s.entries, { ...movedEntry!, section_id: toSectionId, position: newPosition, shelf_index: 0 }] }
           return s
         })
       })
-      // Persist — find newPosition from updated state
       try {
         const toSection = sections.find((s) => s.id === toSectionId)
         const newPosition = toSection ? toSection.entries.length : 0
         await moveBookToSection(entryId, toSectionId, newPosition)
       } catch (e) {
         console.error('Move failed, reverting', e)
-        // Revert: put it back in the original section
+        // Revert unfiltered order too
+        setUnfilteredOrder(prev => ({
+          ...prev,
+          [fromSectionId]: [...(prev[fromSectionId] ?? []), entryId],
+          [toSectionId]:   (prev[toSectionId] ?? []).filter(id => id !== entryId),
+        }))
         setSections((prev) => {
           if (!movedEntry) return prev
           return prev.map((s) => {
@@ -152,7 +464,15 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(180deg, #0E0804 0%, #1C1008 30%, #150D06 100%)' }}>
       {/* Header */}
-      <header className="flex items-center justify-between px-8 py-4 border-b border-[#2C1810] flex-shrink-0">
+      <header
+        className="flex items-center justify-between px-8 py-4 flex-shrink-0 sticky top-0 z-30"
+        style={{
+          background: 'rgba(14,8,4,0.72)',
+          backdropFilter: 'blur(20px) saturate(1.4)',
+          WebkitBackdropFilter: 'blur(20px) saturate(1.4)',
+          borderBottom: '1px solid rgba(74,44,20,0.5)',
+        }}
+      >
         <div className="flex items-center gap-3">
           <BookOpen className="w-7 h-7 text-[#D4A55A]" />
           <h1 className="text-3xl font-bold text-[#D4A55A]" style={{ fontFamily: 'var(--font-playfair)' }}>
@@ -160,13 +480,48 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
           </h1>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowCreateSection(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-[#2C1810] hover:bg-[#3B2010] border border-[#4A2C14] hover:border-[#D4A55A] text-[#D4A55A] rounded-lg text-sm transition-colors"
+          <select
+            value={activeSectionId ?? ''}
+            onChange={(e) => handleSectionFilter(e.target.value || null)}
+            style={{
+              background: 'rgba(44,24,16,0.7)',
+              border: '1px solid rgba(74,44,20,0.7)',
+              color: activeSectionId ? '#D4A55A' : '#A08060',
+              borderRadius: '8px',
+              padding: '6px 28px 6px 12px',
+              fontSize: '13px',
+              fontFamily: 'var(--font-playfair)',
+              cursor: 'pointer',
+              outline: 'none',
+              appearance: 'none',
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23A08060'/%3E%3C/svg%3E")`,
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 10px center',
+            }}
           >
-            <Plus className="w-4 h-4" />
-            New Section
-          </button>
+            <option value="" style={{ background: '#1C0E06' }}>All Sections</option>
+            {sections.map((s) => (
+              <option key={s.id} value={s.id} style={{ background: '#1C0E06' }}>{s.name}</option>
+            ))}
+          </select>
+
+          {activeSectionId ? (
+            <button
+              onClick={handleAddBookcase}
+              className="flex items-center gap-2 px-4 py-2 bg-[#2C1810] hover:bg-[#3B2010] border border-[#4A2C14] hover:border-[#D4A55A] text-[#D4A55A] rounded-lg text-sm transition-colors"
+            >
+              <Layers className="w-4 h-4" />
+              Add Bookcase
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowCreateSection(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-[#2C1810] hover:bg-[#3B2010] border border-[#4A2C14] hover:border-[#D4A55A] text-[#D4A55A] rounded-lg text-sm transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              New Section
+            </button>
+          )}
           <button
             onClick={handleSignOut}
             className="p-2 text-[#6B4020] hover:text-[#A08060] transition-colors"
@@ -177,14 +532,18 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
         </div>
       </header>
 
-      {/* Library room — horizontal scroll */}
+      {/* Library room */}
       <div className="flex-1 overflow-x-auto library-scroll">
         <div
           className="flex gap-8 p-8 pb-16"
-          style={{ minWidth: 'max-content', minHeight: 'calc(100vh - 72px)' }}
+          style={{
+            minWidth: 'max-content',
+            minHeight: 'calc(100vh - 72px)',
+            opacity: isVisible ? 1 : 0,
+            transition: 'opacity 180ms ease',
+          }}
         >
-          {/* Wall texture overlay on top of each column area */}
-          {sections.length === 0 ? (
+          {displayedSections.length === 0 ? (
             <div className="flex items-center justify-center w-full text-center">
               <div className="text-[#4A2C14]">
                 <BookOpen className="w-16 h-16 mx-auto mb-4 opacity-40" />
@@ -193,7 +552,7 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
               </div>
             </div>
           ) : (
-            sections.map((section) => (
+            displayedSections.map((section) => (
               <div
                 key={section.id}
                 className="relative"
@@ -206,10 +565,29 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
                 <SectionColumn
                   section={section}
                   onBookClick={handleBookClick}
-                  onAddBook={setAddingToSection}
+                  onAddBook={handleAddBook}
                   onDeleteSection={handleDeleteSection}
                   onBookMoved={handleBookMoved}
                   onReorderInSection={handleReorderInSection}
+                  onMoveToShelf={handleMoveToShelf}
+                  isFiltered={!!activeSectionId}
+                  width={columnWidths[section.id] ?? 340}
+                  onWidthChange={(w) => handleWidthChange(section.id, w)}
+                  bookcaseWidths={
+                    activeSectionId
+                      ? Array.from(
+                          { length: getBookcaseCount(section.id, section.entries) },
+                          (_, i) => bookcaseWidths[section.id]?.[i] ?? 340
+                        )
+                      : undefined
+                  }
+                  onBookcaseWidthChange={
+                    activeSectionId
+                      ? (bi, w) => handleBookcaseWidthChange(section.id, bi, w)
+                      : undefined
+                  }
+                  bookcaseCount={getBookcaseCount(section.id, section.entries)}
+                  onDeleteBookcase={activeSectionId ? handleDeleteBookcase : undefined}
                 />
               </div>
             ))
@@ -232,7 +610,13 @@ export default function LibraryRoom({ initialSections, userId }: LibraryRoomProp
         <AddBookModal
           sectionId={addingToSection}
           userId={userId}
-          currentCount={sections.find((s) => s.id === addingToSection)?.entries.length ?? 0}
+          targetShelfIndex={addingToShelf}
+          currentCount={
+            // addingToShelf = bookcaseIdx in filtered mode, so count all books
+            // in that bookcase to use as position for the new entry.
+            sections.find((s) => s.id === addingToSection)
+              ?.entries.filter((e) => (e.shelf_index ?? 0) === addingToShelf).length ?? 0
+          }
           onClose={() => setAddingToSection(null)}
           onBookAdded={handleBookAdded}
         />

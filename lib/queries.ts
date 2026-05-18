@@ -16,6 +16,7 @@ export async function getSectionsWithEntries(userId: string): Promise<SectionWit
     .from('shelf_entries')
     .select('*, book:books(*)')
     .eq('user_id', userId)
+    .order('shelf_index', { ascending: true })
     .order('position', { ascending: true })
 
   if (entErr || !entries) {

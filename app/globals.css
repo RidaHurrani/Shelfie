@@ -38,7 +38,7 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 180ms ease;
   flex-shrink: 0;
 }
 
@@ -57,9 +57,18 @@ body {
 }
 
 .book-spine:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+  transform: translateY(-10px) perspective(200px) rotateX(4deg);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.55), 0 4px 8px rgba(0, 0, 0, 0.3);
   z-index: 10;
+}
+
+/* While dragging: suppress the hover lift and fade the source spine */
+.book-spine.dragging,
+.book-spine.dragging:hover {
+  transform: none;
+  box-shadow: none;
+  opacity: 0.35;
+  z-index: 1;
 }
 
 .spine-title {
@@ -77,6 +86,44 @@ body {
   white-space: nowrap;
   text-overflow: ellipsis;
   user-select: none;
+}
+
+/* ── Series tooltip ──────────────────────────── */
+.series-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: rgba(28, 14, 6, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(212, 165, 90, 0.4);
+  color: #D4A55A;
+  font-family: var(--font-playfair);
+  font-size: 10px;
+  font-style: italic;
+  padding: 4px 8px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  z-index: 20;
+  animation: tooltipIn 150ms ease forwards;
+}
+
+@keyframes tooltipIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ── Modal entrance ──────────────────────────── */
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-panel {
+  animation: modalIn 220ms cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
 }
 
 /* ── Shelf plank ─────────────────────────────── */
@@ -98,12 +145,13 @@ body {
   height: 16px;
   background: linear-gradient(
     to bottom,
-    #8B5E3C 0%,
+    #A8703E 0%,
+    #8B5E3C 6%,
     #6B3A1F 55%,
     #4A2410 100%
   );
   border-radius: 0 0 3px 3px;
-  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 /* ── Library scrollbar ───────────────────────── */
