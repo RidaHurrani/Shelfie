@@ -59,6 +59,17 @@ export default function LibraryRoom({
   const [friends]        = useState<Friendship[]>(initialFriends)
   const [myRecs, setMyRecs] = useState<Pick<Recommendation, 'id' | 'book_id'>[]>(initialMyRecs)
 
+  // Track the last time the Friends panel was opened so we can badge new recs.
+  const recsLsKey = `shelfie_last_viewed_recs_${userId}`
+  const [lastViewedRecsAt, setLastViewedRecsAt] = useState<Date>(() => {
+    if (typeof window === 'undefined') return new Date(0)
+    const stored = localStorage.getItem(`shelfie_last_viewed_recs_${userId}`)
+    return stored ? new Date(stored) : new Date(0)
+  })
+  const hasNewRecs = initialFriendsRecs.some(
+    r => new Date(r.created_at) > lastViewedRecsAt
+  )
+
   const [unfilteredOrder, setUnfilteredOrder] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(
       initialSections.map(s => [
@@ -576,7 +587,16 @@ export default function LibraryRoom({
           )}
           {/* Friends panel toggle */}
           <button
-            onClick={() => setShowFriendsPanel(v => !v)}
+            onClick={() => {
+              const opening = !showFriendsPanel
+              setShowFriendsPanel(opening)
+              if (opening) {
+                // Mark all current recs as seen the moment the panel opens
+                const now = new Date()
+                setLastViewedRecsAt(now)
+                try { localStorage.setItem(recsLsKey, now.toISOString()) } catch { /* ignore */ }
+              }
+            }}
             className="relative p-2 transition-colors"
             style={{ color: showFriendsPanel ? '#D4A55A' : '#6B4020' }}
             onMouseEnter={e => { if (!showFriendsPanel) e.currentTarget.style.color = '#A08060' }}
@@ -584,12 +604,12 @@ export default function LibraryRoom({
             title="Friends & Recommendations"
           >
             <Users className="w-4 h-4" />
-            {initialPendingRequests.length > 0 && (
+            {(initialPendingRequests.length > 0 || hasNewRecs) && !showFriendsPanel && (
               <span
                 className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full text-white text-[8px] flex items-center justify-center font-bold"
                 style={{ background: '#8B2635' }}
               >
-                {initialPendingRequests.length}
+                {initialPendingRequests.length > 0 ? initialPendingRequests.length : '!'}
               </span>
             )}
           </button>
