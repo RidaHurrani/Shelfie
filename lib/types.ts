@@ -33,6 +33,7 @@ export interface ShelfEntry {
   custom_title: string | null
   series_name: string | null
   reading_status: 'want_to_read' | 'reading' | 'read' | null
+  read_at: string | null
   shelf_index: number
   book: Book
 }

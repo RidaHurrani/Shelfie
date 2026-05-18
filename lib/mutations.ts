@@ -118,7 +118,10 @@ export async function updateShelfEntry(
       spine_color: spineColor,
       custom_title: customTitle || null,
       series_name: seriesName !== undefined ? (seriesName || null) : undefined,
-      ...(readingStatus !== undefined && { reading_status: readingStatus }),
+      ...(readingStatus !== undefined && {
+        reading_status: readingStatus,
+        read_at: readingStatus === 'read' ? new Date().toISOString() : null,
+      }),
     })
     .eq('id', entryId)
   if (error) throw new Error(error.message)

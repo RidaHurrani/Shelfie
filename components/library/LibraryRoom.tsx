@@ -6,7 +6,8 @@ import BookDetailModal from "./BookDetailModal"
 import AddBookModal from "./AddBookModal"
 import CreateSectionModal from "./CreateSectionModal"
 import FriendsPanel from "./FriendsPanel"
-import { Plus, BookOpen, LogOut, Layers, Users } from "lucide-react"
+import StatsPanel from "./StatsPanel"
+import { Plus, BookOpen, LogOut, Layers, Users, BarChart2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { deleteSection, moveBookToSection, moveToShelf, reorderSection, createRecommendation, removeRecommendation, addBookFromRecommendation } from "@/lib/mutations"
@@ -56,6 +57,7 @@ export default function LibraryRoom({
   // add/remove operations update it.
   // ── Social state ─────────────────────────────────────────────────────────────
   const [showFriendsPanel, setShowFriendsPanel] = useState(false)
+  const [showStatsPanel, setShowStatsPanel] = useState(false)
   const [friends]        = useState<Friendship[]>(initialFriends)
   const [myRecs, setMyRecs] = useState<Pick<Recommendation, 'id' | 'book_id'>[]>(initialMyRecs)
 
@@ -241,6 +243,9 @@ export default function LibraryRoom({
       return { ...section, entries }
     })
   }, [activeSectionId, sections, unfilteredOrder, columnWidths])
+
+  // Flat list of all entries across all sections — used by StatsPanel
+  const allEntries = useMemo(() => sections.flatMap(s => s.entries), [sections])
 
   const handleRecommendToggle = useCallback(async (entry: ShelfEntry) => {
     const existing = myRecs.find(r => r.book_id === entry.book_id)
@@ -614,6 +619,18 @@ export default function LibraryRoom({
             )}
           </button>
 
+          {/* Stats panel toggle */}
+          <button
+            onClick={() => setShowStatsPanel(v => !v)}
+            className="relative p-2 transition-colors"
+            style={{ color: showStatsPanel ? '#D4A55A' : '#6B4020' }}
+            onMouseEnter={e => { if (!showStatsPanel) e.currentTarget.style.color = '#A08060' }}
+            onMouseLeave={e => { if (!showStatsPanel) e.currentTarget.style.color = '#6B4020' }}
+            title="Reading Stats"
+          >
+            <BarChart2 className="w-4 h-4" />
+          </button>
+
           <button
             onClick={handleSignOut}
             className="p-2 text-[#6B4020] hover:text-[#A08060] transition-colors"
@@ -686,6 +703,14 @@ export default function LibraryRoom({
           )}
         </div>
       </div>
+
+      {/* Stats panel */}
+      {showStatsPanel && (
+        <StatsPanel
+          entries={allEntries}
+          onClose={() => setShowStatsPanel(false)}
+        />
+      )}
 
       {/* Friends panel */}
       {showFriendsPanel && (
