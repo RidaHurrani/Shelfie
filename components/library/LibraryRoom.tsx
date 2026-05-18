@@ -1,5 +1,5 @@
 "use client"
-import { useState, useCallback, useMemo } from "react"
+import { useState, useCallback, useMemo, useEffect } from "react"
 import { SectionWithEntries, ShelfEntry, Section, Book, Friendship, Recommendation } from "@/lib/types"
 import SectionColumn from "./SectionColumn"
 import BookDetailModal from "./BookDetailModal"
@@ -61,16 +61,19 @@ export default function LibraryRoom({
   const [friends]        = useState<Friendship[]>(initialFriends)
   const [myRecs, setMyRecs] = useState<Pick<Recommendation, 'id' | 'book_id'>[]>(initialMyRecs)
 
-  // Track the last time the Friends panel was opened so we can badge new recs.
+  // Track whether there are unread friend recs since the panel was last opened.
+  // Starts false so SSR never renders the badge; a useEffect computes the real
+  // value client-side (where localStorage is actually available).
   const recsLsKey = `shelfie_last_viewed_recs_${userId}`
-  const [lastViewedRecsAt, setLastViewedRecsAt] = useState<Date>(() => {
-    if (typeof window === 'undefined') return new Date(0)
-    const stored = localStorage.getItem(`shelfie_last_viewed_recs_${userId}`)
-    return stored ? new Date(stored) : new Date(0)
-  })
-  const hasNewRecs = initialFriendsRecs.some(
-    r => new Date(r.created_at) > lastViewedRecsAt
-  )
+  const [hasNewRecs, setHasNewRecs] = useState(false)
+  useEffect(() => {
+    const stored = localStorage.getItem(recsLsKey)
+    const lastViewed = stored ? new Date(stored) : new Date(0)
+    if (initialFriendsRecs.some(r => new Date(r.created_at) > lastViewed)) {
+      setHasNewRecs(true)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // intentionally once on mount
 
   const [unfilteredOrder, setUnfilteredOrder] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(
@@ -597,9 +600,8 @@ export default function LibraryRoom({
               setShowFriendsPanel(opening)
               if (opening) {
                 // Mark all current recs as seen the moment the panel opens
-                const now = new Date()
-                setLastViewedRecsAt(now)
-                try { localStorage.setItem(recsLsKey, now.toISOString()) } catch { /* ignore */ }
+                setHasNewRecs(false)
+                try { localStorage.setItem(recsLsKey, new Date().toISOString()) } catch { /* ignore */ }
               }
             }}
             className="relative p-2 transition-colors"
