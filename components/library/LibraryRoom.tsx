@@ -61,9 +61,20 @@ export default function LibraryRoom({
   const [friends]        = useState<Friendship[]>(initialFriends)
   const [myRecs, setMyRecs] = useState<Pick<Recommendation, 'id' | 'book_id' | 'recipient_id'>[]>(initialMyRecs)
 
-  // hasAnyUnseen is reported up from FriendsPanel via onUnseenChange.
-  // Starts false (no badge on SSR); FriendsPanel hydrates it on first render.
+  // hasAnyUnseen drives the icon badge when the panel is closed.
+  // Initialized client-side from localStorage + server props; then kept live
+  // by FriendsPanel via onUnseenChange while the panel is open.
   const [hasAnyUnseen, setHasAnyUnseen] = useState(false)
+  useEffect(() => {
+    try {
+      const lastFeed = localStorage.getItem(`shelfie_last_seen_feed_${userId}`)
+      const lastFeedDate = lastFeed ? new Date(lastFeed) : new Date(0)
+      const hasNewFeed = initialFriendsRecs.some(r => new Date(r.created_at) > lastFeedDate)
+      const hasPending = initialPendingRequests.length > 0
+      setHasAnyUnseen(hasNewFeed || hasPending)
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const unfilteredOrderLsKey = `shelfie_unfiltered_order_${userId}`
 
