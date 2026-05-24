@@ -4,7 +4,7 @@ import { ShelfEntry, Friendship } from "@/lib/types"
 import StarRating from "./StarRating"
 import { updateRating, removeBookFromShelf, updateShelfEntry } from "@/lib/mutations"
 import { SPINE_PALETTE, generateSpineColor, READING_STATUSES, ReadingStatus } from "@/lib/utils"
-import { X, Trash2, BookOpen, Pencil, Check, Heart, ChevronDown, ChevronUp, Minus, MessageSquare } from "lucide-react"
+import { X, Trash2, BookOpen, Pencil, Check, Heart, ChevronDown, ChevronUp, Minus, MessageSquare, ScrollText } from "lucide-react"
 import Image from "next/image"
 
 interface BookDetailModalProps {
@@ -46,6 +46,40 @@ export default function BookDetailModal({
       return stored ? JSON.parse(stored) : {}
     } catch { return {} }
   })
+
+  // Journal state
+  const [journalOpen, setJournalOpen]     = useState(false)
+  const [journalContent, setJournalContent] = useState('')
+  const [journalLoading, setJournalLoading] = useState(false)
+  const [journalSaving, setJournalSaving]   = useState(false)
+
+  const handleOpenJournal = async () => {
+    setJournalOpen(true)
+    setJournalLoading(true)
+    try {
+      const res = await fetch(`/api/journal?book_id=${entry.book_id}`)
+      if (res.ok) {
+        const data = await res.json()
+        setJournalContent(data.content ?? '')
+      }
+    } catch { /* ignore */ } finally {
+      setJournalLoading(false)
+    }
+  }
+
+  const handleSaveJournal = async () => {
+    setJournalSaving(true)
+    try {
+      await fetch('/api/journal', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ book_id: entry.book_id, content: journalContent }),
+      })
+      setJournalOpen(false)
+    } catch { /* ignore */ } finally {
+      setJournalSaving(false)
+    }
+  }
 
   // Forum starter state
   const [forumPickerOpen, setForumPickerOpen]           = useState(false)
@@ -203,7 +237,7 @@ export default function BookDetailModal({
         </button>
 
         {/* ── View mode ─────────────────────────────── */}
-        {!isEditing && (
+        {!isEditing && !journalOpen && (
           <div className="flex">
             {/* Cover panel */}
             <div
@@ -320,6 +354,22 @@ export default function BookDetailModal({
                   </div>
                 )}
 
+                {/* ── Open Journal ──────────────────────────────────── */}
+                {userId && (
+                  <div className="mt-3">
+                    <button
+                      onClick={handleOpenJournal}
+                      className="flex items-center gap-1.5 text-xs transition-colors w-full"
+                      style={{ color: '#4A2C14' }}
+                      onMouseEnter={e => { e.currentTarget.style.color = '#A08060' }}
+                      onMouseLeave={e => { e.currentTarget.style.color = '#4A2C14' }}
+                    >
+                      <ScrollText className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span>Open journal</span>
+                    </button>
+                  </div>
+                )}
+
                 {/* ── Start Forum ───────────────────────────────────── */}
                 {hasFriends && userId && (
                   <div className="mt-3">
@@ -404,6 +454,77 @@ export default function BookDetailModal({
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Journal mode ──────────────────────────── */}
+        {journalOpen && (
+          <div className="flex flex-col" style={{ minHeight: '420px' }}>
+            <div
+              className="flex items-center justify-between px-6 py-4 flex-shrink-0"
+              style={{ borderBottom: '1px solid rgba(74,44,20,0.4)' }}
+            >
+              <div className="flex items-center gap-2">
+                <ScrollText className="w-4 h-4 text-[#D4A55A]" />
+                <h3 className="text-base font-semibold text-[#F5E6C8]" style={{ fontFamily: 'var(--font-playfair)' }}>
+                  Journal
+                </h3>
+                <span className="text-xs text-[#6B4020] truncate max-w-[160px]">— {displayTitle}</span>
+              </div>
+              <button
+                onClick={() => setJournalOpen(false)}
+                className="p-1.5 text-[#4A2C14] hover:text-[#A08060] transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 flex flex-col p-5 gap-4">
+              {journalLoading ? (
+                <p className="text-sm text-center text-[#4A2C14] mt-10">Loading…</p>
+              ) : (
+                <textarea
+                  autoFocus
+                  value={journalContent}
+                  onChange={e => setJournalContent(e.target.value)}
+                  placeholder="Notes, quotes, thoughts… anything goes."
+                  className="flex-1 w-full resize-none text-sm leading-relaxed focus:outline-none"
+                  style={{
+                    background: 'rgba(14,8,4,0.6)',
+                    border: '1px solid rgba(74,44,20,0.5)',
+                    borderRadius: '10px',
+                    color: '#F5E6C8',
+                    padding: '14px',
+                    minHeight: '240px',
+                    caretColor: '#D4A55A',
+                  }}
+                  onFocus={e => { e.currentTarget.style.borderColor = 'rgba(212,165,90,0.5)' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = 'rgba(74,44,20,0.5)' }}
+                />
+              )}
+
+              {!journalLoading && (
+                <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    onClick={handleSaveJournal}
+                    disabled={journalSaving}
+                    className="flex-1 py-2 text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
+                    style={{ background: '#D4A55A', color: '#1C0E06' }}
+                  >
+                    {journalSaving ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    onClick={() => setJournalOpen(false)}
+                    className="px-4 py-2 text-sm rounded-lg transition-colors"
+                    style={{ background: 'rgba(44,24,16,0.6)', color: '#A08060', border: '1px solid rgba(74,44,20,0.4)' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(74,44,20,0.4)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(44,24,16,0.6)' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
