@@ -37,8 +37,9 @@ export async function getFriendsRecommendations(userId: string): Promise<Recomme
 
   const { data: recs } = await supabase
     .from('recommendations')
-    .select('id, user_id, book_id, user_rating, note, created_at, book:books(*)')
+    .select('id, user_id, book_id, recipient_id, user_rating, note, created_at, book:books(*)')
     .neq('user_id', userId)
+    .eq('recipient_id', userId)
     .order('created_at', { ascending: false })
 
   if (!recs?.length) return []
@@ -110,14 +111,14 @@ export async function getPendingFriendRequests(userId: string): Promise<Friendsh
   })) as Friendship[]
 }
 
-/** Current user's own recommendations (book_id only needed for toggle state). */
-export async function getMyRecommendations(userId: string): Promise<Pick<Recommendation, 'id' | 'book_id'>[]> {
+/** Current user's own recommendations — tracks which friends each book was sent to. */
+export async function getMyRecommendations(userId: string): Promise<Pick<Recommendation, 'id' | 'book_id' | 'recipient_id'>[]> {
   const supabase = await createClient()
 
   const { data } = await supabase
     .from('recommendations')
-    .select('id, book_id')
+    .select('id, book_id, recipient_id')
     .eq('user_id', userId)
 
-  return (data ?? []) as Pick<Recommendation, 'id' | 'book_id'>[]
+  return (data ?? []) as Pick<Recommendation, 'id' | 'book_id' | 'recipient_id'>[]
 }

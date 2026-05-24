@@ -1,10 +1,10 @@
 "use client"
 import { useState } from "react"
-import { ShelfEntry } from "@/lib/types"
+import { ShelfEntry, Friendship } from "@/lib/types"
 import StarRating from "./StarRating"
 import { updateRating, removeBookFromShelf, updateShelfEntry } from "@/lib/mutations"
 import { SPINE_PALETTE, generateSpineColor, READING_STATUSES, ReadingStatus } from "@/lib/utils"
-import { X, Trash2, BookOpen, Pencil, Check, Heart } from "lucide-react"
+import { X, Trash2, BookOpen, Pencil, Check, Heart, ChevronDown, ChevronUp, Minus } from "lucide-react"
 import Image from "next/image"
 
 interface BookDetailModalProps {
@@ -14,9 +14,10 @@ interface BookDetailModalProps {
   onRemove: (entryId: string) => void
   onEntryUpdated: (entryId: string, spineColor: string, customTitle: string | null, seriesName: string | null, readingStatus: string) => void
   // Social
-  hasFriends?: boolean
-  isRecommended?: boolean
-  onRecommendToggle?: () => void
+  friends?: Friendship[]
+  userId?: string
+  recommendedToFriendIds?: string[]
+  onFriendRecommendToggle?: (friendId: string, recommend: boolean) => Promise<void>
 }
 
 export default function BookDetailModal({
@@ -25,13 +26,52 @@ export default function BookDetailModal({
   onRatingChange,
   onRemove,
   onEntryUpdated,
-  hasFriends = false,
-  isRecommended = false,
-  onRecommendToggle,
+  friends,
+  userId,
+  recommendedToFriendIds = [],
+  onFriendRecommendToggle,
 }: BookDetailModalProps) {
   const [saving, setSaving] = useState(false)
   const [removing, setRemoving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
+
+  // Friend-picker state
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
+  const [nicknames] = useState<Record<string, string>>(() => {
+    if (!userId) return {}
+    try {
+      const stored = localStorage.getItem(`shelfie_friend_nicknames_${userId}`)
+      return stored ? JSON.parse(stored) : {}
+    } catch { return {} }
+  })
+
+  const hasFriends = (friends?.length ?? 0) > 0
+  const anyRecommended = recommendedToFriendIds.length > 0
+  const allRecommended = hasFriends && friends!.every(f => recommendedToFriendIds.includes(f.profile.id))
+  const someRecommended = anyRecommended && !allRecommended
+
+  const friendDisplayName = (f: Friendship) =>
+    nicknames[f.profile.id] ?? f.profile.display_name ?? f.profile.email
+
+  const handleToggleFriend = async (friendId: string) => {
+    if (togglingIds.has(friendId) || !onFriendRecommendToggle) return
+    const isRec = recommendedToFriendIds.includes(friendId)
+    setTogglingIds(prev => new Set(prev).add(friendId))
+    try {
+      await onFriendRecommendToggle(friendId, !isRec)
+    } catch { /* parent already logs */ } finally {
+      setTogglingIds(prev => { const n = new Set(prev); n.delete(friendId); return n })
+    }
+  }
+
+  const handleToggleAll = async () => {
+    if (!friends || !onFriendRecommendToggle) return
+    const targets = allRecommended
+      ? friends.map(f => f.profile.id)
+      : friends.filter(f => !recommendedToFriendIds.includes(f.profile.id)).map(f => f.profile.id)
+    await Promise.all(targets.map(id => handleToggleFriend(id)))
+  }
 
   // Edit mode state — initialised from current entry
   const [editSpine, setEditSpine] = useState(entry.spine_color ?? generateSpineColor(entry.book.google_books_id))
@@ -168,21 +208,88 @@ export default function BookDetailModal({
                 <StarRating value={entry.user_rating} onChange={handleRate} />
 
                 {hasFriends && (
-                  <button
-                    onClick={onRecommendToggle}
-                    className="flex items-center gap-1.5 mt-3 text-xs transition-colors"
-                    style={{
-                      color: isRecommended ? '#D4A55A' : '#4A2C14',
-                    }}
-                    onMouseEnter={e => { if (!isRecommended) e.currentTarget.style.color = '#A08060' }}
-                    onMouseLeave={e => { if (!isRecommended) e.currentTarget.style.color = '#4A2C14' }}
-                  >
-                    <Heart
-                      className="w-3.5 h-3.5"
-                      fill={isRecommended ? '#D4A55A' : 'none'}
-                    />
-                    {isRecommended ? 'Recommended ✓' : 'Recommend to friends'}
-                  </button>
+                  <div className="mt-3">
+                    {/* Header row toggles the picker open/closed */}
+                    <button
+                      onClick={() => setPickerOpen(v => !v)}
+                      className="flex items-center gap-1.5 text-xs transition-colors w-full"
+                      style={{ color: anyRecommended ? '#D4A55A' : '#4A2C14' }}
+                      onMouseEnter={e => { if (!anyRecommended) e.currentTarget.style.color = '#A08060' }}
+                      onMouseLeave={e => { if (!anyRecommended) e.currentTarget.style.color = anyRecommended ? '#D4A55A' : '#4A2C14' }}
+                    >
+                      <Heart className="w-3.5 h-3.5 flex-shrink-0" fill={anyRecommended ? '#D4A55A' : 'none'} />
+                      <span className="flex-1 text-left">
+                        {anyRecommended
+                          ? `Recommended to ${recommendedToFriendIds.length} friend${recommendedToFriendIds.length > 1 ? 's' : ''}`
+                          : 'Recommend to friends'}
+                      </span>
+                      {pickerOpen ? <ChevronUp className="w-3 h-3 flex-shrink-0" /> : <ChevronDown className="w-3 h-3 flex-shrink-0" />}
+                    </button>
+
+                    {pickerOpen && (
+                      <div
+                        className="mt-2 rounded-lg overflow-hidden"
+                        style={{ border: '1px solid rgba(74,44,20,0.4)', background: 'rgba(14,8,4,0.6)' }}
+                      >
+                        {/* All friends row */}
+                        <button
+                          onClick={handleToggleAll}
+                          className="flex items-center gap-2 w-full px-3 py-2 text-left transition-colors"
+                          style={{ borderBottom: '1px solid rgba(74,44,20,0.3)' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(44,24,16,0.5)' }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                        >
+                          <div
+                            className="w-3.5 h-3.5 rounded-sm border flex items-center justify-center flex-shrink-0"
+                            style={{
+                              background: allRecommended ? '#D4A55A' : 'transparent',
+                              borderColor: anyRecommended ? '#D4A55A' : 'rgba(74,44,20,0.7)',
+                            }}
+                          >
+                            {allRecommended && <Check className="w-2.5 h-2.5 text-[#1C0E06]" />}
+                            {someRecommended && <Minus className="w-2.5 h-2.5 text-[#D4A55A]" />}
+                          </div>
+                          <span className="text-xs font-medium" style={{ color: anyRecommended ? '#D4A55A' : '#6B4020' }}>
+                            All friends
+                          </span>
+                        </button>
+
+                        {/* Individual friends */}
+                        <div className="max-h-36 overflow-y-auto">
+                          {friends!.map(f => {
+                            const isRec = recommendedToFriendIds.includes(f.profile.id)
+                            const isLoading = togglingIds.has(f.profile.id)
+                            return (
+                              <button
+                                key={f.id}
+                                onClick={() => handleToggleFriend(f.profile.id)}
+                                disabled={isLoading}
+                                className="flex items-center gap-2 w-full px-3 py-2 text-left transition-colors disabled:opacity-50"
+                                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(44,24,16,0.5)' }}
+                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                              >
+                                <div
+                                  className="w-3.5 h-3.5 rounded-sm border flex items-center justify-center flex-shrink-0 transition-colors"
+                                  style={{
+                                    background: isRec ? '#D4A55A' : 'transparent',
+                                    borderColor: isRec ? '#D4A55A' : 'rgba(74,44,20,0.7)',
+                                  }}
+                                >
+                                  {isRec && <Check className="w-2.5 h-2.5 text-[#1C0E06]" />}
+                                </div>
+                                <span className="text-xs truncate" style={{ color: isRec ? '#D4A55A' : '#A08060' }}>
+                                  {friendDisplayName(f)}
+                                </span>
+                                {isLoading && (
+                                  <span className="ml-auto text-[10px] text-[#4A2C14] flex-shrink-0">…</span>
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

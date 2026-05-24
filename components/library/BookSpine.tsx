@@ -10,6 +10,7 @@ interface BookSpineProps {
   onSeriesEnter?: (series: string) => void
   onSeriesLeave?: () => void
   onDropOnSpine?: (draggedId: string, targetId: string, before: boolean) => void
+  isFiltered?: boolean
 }
 
 export default function BookSpine({
@@ -19,6 +20,7 @@ export default function BookSpine({
   onSeriesEnter,
   onSeriesLeave,
   onDropOnSpine,
+  isFiltered = true,
 }: BookSpineProps) {
   const isCoverMode = entry.spine_color === 'cover' && !!entry.book.cover_url
   const color = isCoverMode ? '#1C0E06' : (entry.spine_color ?? '#5A3A20')
@@ -75,8 +77,10 @@ export default function BookSpine({
       }
       const isSameSection = data.fromSectionId === entry.section_id
       const isSameShelf = (data.fromShelfIndex ?? 0) === (entry.shelf_index ?? 0)
-      if (isSameSection && isSameShelf && data.entryId !== entry.id) {
-        // Same bookcase reorder — handle here and stop propagation
+      // In unfiltered mode, shelf_index is a virtual row index, so allow
+      // cross-row spine drops within the same section.
+      if (isSameSection && (isSameShelf || !isFiltered) && data.entryId !== entry.id) {
+        // Same section reorder — handle here and stop propagation
         e.stopPropagation()
         const rect = e.currentTarget.getBoundingClientRect()
         const before = e.clientX < rect.left + rect.width / 2

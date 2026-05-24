@@ -206,16 +206,16 @@ export async function createRecommendation(
   userId: string,
   bookId: string,
   rating: number | null,
-  note?: string
-): Promise<Pick<Recommendation, 'id' | 'book_id'>> {
+  recipientId: string
+): Promise<Pick<Recommendation, 'id' | 'book_id' | 'recipient_id'>> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('recommendations')
-    .insert({ user_id: userId, book_id: bookId, user_rating: rating, note: note ?? null })
-    .select('id, book_id')
+    .insert({ user_id: userId, book_id: bookId, user_rating: rating, recipient_id: recipientId })
+    .select('id, book_id, recipient_id')
     .single()
   if (error) throw new Error(error.message)
-  return data as Pick<Recommendation, 'id' | 'book_id'>
+  return data as Pick<Recommendation, 'id' | 'book_id' | 'recipient_id'>
 }
 
 export async function removeRecommendation(recId: string): Promise<void> {

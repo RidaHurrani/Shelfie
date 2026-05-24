@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect } from "react"
-import { X, Users, Search, UserPlus, Check, BookOpen, UserMinus, BookPlus } from "lucide-react"
+import { X, Users, Search, UserPlus, Check, BookOpen, UserMinus, BookPlus, Pencil } from "lucide-react"
 import { Friendship, Recommendation, Profile, Section, Book } from "@/lib/types"
 import StarRating from "./StarRating"
 import {
@@ -53,6 +53,19 @@ export default function FriendsPanel({
   const [searching, setSearching]         = useState(false)
   const [sentRequests, setSentRequests]   = useState<Set<string>>(new Set())
 
+  // Per-friend nicknames stored in localStorage. Key = friend's user ID.
+  // FriendsPanel only mounts on the client (conditionally rendered), so
+  // reading localStorage in useState is safe — no SSR mismatch.
+  const nicknameLsKey = `shelfie_friend_nicknames_${userId}`
+  const [nicknames, setNicknames] = useState<Record<string, string>>(() => {
+    try {
+      const stored = localStorage.getItem(`shelfie_friend_nicknames_${userId}`)
+      return stored ? JSON.parse(stored) : {}
+    } catch { return {} }
+  })
+  const [editingUserId, setEditingUserId] = useState<string | null>(null)
+  const [nicknameInput, setNicknameInput] = useState('')
+
   // Debounced user search
   useEffect(() => {
     if (searchQuery.length < 2) { setSearchResults([]); return }
@@ -96,6 +109,18 @@ export default function FriendsPanel({
       await removeFriend(friendshipId)
       setFriends(prev => prev.filter(f => f.id !== friendshipId))
     } catch (e) { console.error(e) }
+  }
+
+  const saveNickname = (friendUserId: string) => {
+    const trimmed = nicknameInput.trim()
+    setNicknames(prev => {
+      const updated = { ...prev }
+      if (trimmed) updated[friendUserId] = trimmed
+      else delete updated[friendUserId]
+      try { localStorage.setItem(nicknameLsKey, JSON.stringify(updated)) } catch { /* ignore */ }
+      return updated
+    })
+    setEditingUserId(null)
   }
 
   return (
@@ -183,7 +208,7 @@ export default function FriendsPanel({
                   </p>
                 </div>
               ) : recs.map(rec => (
-                <RecCard key={rec.id} rec={rec} sections={sections} onAddToLibrary={onAddToLibrary} />
+                <RecCard key={rec.id} rec={rec} sections={sections} onAddToLibrary={onAddToLibrary} nicknames={nicknames} />
               ))}
             </div>
           )}
@@ -302,29 +327,79 @@ export default function FriendsPanel({
                   </p>
                 ) : (
                   <div className="flex flex-col gap-1.5">
-                    {friends.map(f => (
-                      <div
-                        key={f.id}
-                        className="flex items-center justify-between py-2 px-3 rounded-lg"
-                        style={{ background: 'rgba(44,24,16,0.5)' }}
-                      >
-                        <div className="min-w-0 mr-2">
-                          <p className="text-sm text-[#F5E6C8] truncate">
-                            {f.profile.display_name ?? f.profile.email}
-                          </p>
-                          {f.profile.display_name && (
-                            <p className="text-xs text-[#4A2C14] truncate">{f.profile.email}</p>
+                    {friends.map(f => {
+                      const isEditing = editingUserId === f.profile.id
+                      const displayName = nicknames[f.profile.id] ?? f.profile.display_name ?? f.profile.email
+                      return (
+                        <div
+                          key={f.id}
+                          className="flex items-center justify-between py-2 px-3 rounded-lg"
+                          style={{ background: 'rgba(44,24,16,0.5)' }}
+                        >
+                          {isEditing ? (
+                            <div className="flex items-center gap-1.5 flex-1 min-w-0 mr-2">
+                              <input
+                                autoFocus
+                                type="text"
+                                value={nicknameInput}
+                                onChange={e => setNicknameInput(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') saveNickname(f.profile.id)
+                                  if (e.key === 'Escape') setEditingUserId(null)
+                                }}
+                                placeholder={f.profile.email}
+                                className="flex-1 min-w-0 text-sm rounded px-2 py-0.5 focus:outline-none"
+                                style={{
+                                  background: '#0E0804',
+                                  border: '1px solid #D4A55A',
+                                  color: '#F5E6C8',
+                                }}
+                              />
+                              <button
+                                onClick={() => saveNickname(f.profile.id)}
+                                className="p-1 text-[#D4A55A] hover:text-[#F5E6C8] transition-colors flex-shrink-0"
+                                title="Save"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setEditingUserId(null)}
+                                className="p-1 text-[#4A2C14] hover:text-[#A08060] transition-colors flex-shrink-0"
+                                title="Cancel"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="min-w-0 mr-2">
+                              <p className="text-sm text-[#F5E6C8] truncate">{displayName}</p>
+                              <p className="text-xs text-[#4A2C14] truncate">{f.profile.email}</p>
+                            </div>
+                          )}
+                          {!isEditing && (
+                            <div className="flex items-center gap-0.5 flex-shrink-0">
+                              <button
+                                onClick={() => {
+                                  setEditingUserId(f.profile.id)
+                                  setNicknameInput(nicknames[f.profile.id] ?? '')
+                                }}
+                                className="p-1 text-[#4A2C14] hover:text-[#A08060] transition-colors"
+                                title="Rename"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => handleRemoveFriend(f.id)}
+                                className="p-1 text-[#4A2C14] hover:text-red-400 transition-colors"
+                                title="Remove friend"
+                              >
+                                <UserMinus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           )}
                         </div>
-                        <button
-                          onClick={() => handleRemoveFriend(f.id)}
-                          className="p-1 text-[#4A2C14] hover:text-red-400 transition-colors flex-shrink-0"
-                          title="Remove friend"
-                        >
-                          <UserMinus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -343,10 +418,11 @@ interface RecCardProps {
   rec: Recommendation
   sections: Section[]
   onAddToLibrary: (book: Book, sectionId: string) => Promise<void>
+  nicknames: Record<string, string>
 }
 
-function RecCard({ rec, sections, onAddToLibrary }: RecCardProps) {
-  const name = rec.recommender?.display_name ?? rec.recommender?.email ?? 'Someone'
+function RecCard({ rec, sections, onAddToLibrary, nicknames }: RecCardProps) {
+  const name = nicknames[rec.recommender?.id ?? ''] ?? rec.recommender?.display_name ?? rec.recommender?.email ?? 'Someone'
   const { book } = rec
 
   const [picking, setPicking]   = useState(false)

@@ -106,16 +106,26 @@ export default function SectionColumn({
     } catch { /* malformed */ }
   }
 
-  // ── Within-bookcase reorder (filtered mode) ─────────────────────────────────
-  // In filtered mode shelf_index === bookcaseIdx, so "same shelf" = same bookcase.
+  // ── Reorder on spine drop ────────────────────────────────────────────────────
+  // Filtered mode: reorder only within the same bookcase (shelf_index = bookcase).
+  // Unfiltered mode: reorder across all entries in the section (virtual rows).
   const handleDropOnSpine = (draggedId: string, targetId: string, before: boolean) => {
     const entry = section.entries.find(e => e.id === draggedId)
     if (!entry) return
-    const bookcaseIdx = entry.shelf_index ?? 0
-    const bookcaseEntries = section.entries
-      .filter(e => (e.shelf_index ?? 0) === bookcaseIdx)
-      .sort((a, b) => a.position - b.position)
-    const remaining = bookcaseEntries.filter(e => e.id !== draggedId)
+    let pool: ShelfEntry[]
+    if (isFiltered) {
+      const bookcaseIdx = entry.shelf_index ?? 0
+      pool = section.entries
+        .filter(e => (e.shelf_index ?? 0) === bookcaseIdx)
+        .sort((a, b) => a.position - b.position)
+    } else {
+      pool = [...section.entries].sort((a, b) => {
+        const ai = a.shelf_index ?? 0, bi = b.shelf_index ?? 0
+        if (ai !== bi) return ai - bi
+        return a.position - b.position
+      })
+    }
+    const remaining = pool.filter(e => e.id !== draggedId)
     const targetIdx = remaining.findIndex(e => e.id === targetId)
     if (targetIdx === -1) return
     const insertAt = before ? targetIdx : targetIdx + 1
@@ -211,13 +221,10 @@ export default function SectionColumn({
               onSeriesEnter={s => setHoveredSeries(s)}
               onSeriesLeave={() => setHoveredSeries(null)}
               onDropOnSpine={handleDropOnSpine}
-              // Use the first book's shelf_index as this row's identity.
-              // In the new model shelf_index = bookcase, so all books in a
-              // visual row share the same value and same-row reorders work
-              // correctly with the existing handleDropOnSpine logic.
               shelfIndex={rowBooks[0]?.shelf_index ?? 0}
               sectionId={section.id}
               onDropOnShelf={handleDropOnShelf}
+              isFiltered={false}
             />
           ))}
           {isDragOver && section.entries.length === 0 && (
@@ -316,6 +323,7 @@ export default function SectionColumn({
                   shelfIndex={bi}
                   sectionId={section.id}
                   onDropOnShelf={handleDropOnShelf}
+                  isFiltered={true}
                 />
               ))}
 

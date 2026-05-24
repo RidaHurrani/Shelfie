@@ -19,7 +19,7 @@ interface LibraryRoomProps {
   initialFriendsRecs: Recommendation[]
   initialFriends: Friendship[]
   initialPendingRequests: Friendship[]
-  initialMyRecs: Pick<Recommendation, 'id' | 'book_id'>[]
+  initialMyRecs: Pick<Recommendation, 'id' | 'book_id' | 'recipient_id'>[]
 }
 
 function sortEntries(entries: ShelfEntry[]): ShelfEntry[] {
@@ -59,7 +59,7 @@ export default function LibraryRoom({
   const [showFriendsPanel, setShowFriendsPanel] = useState(false)
   const [showStatsPanel, setShowStatsPanel] = useState(false)
   const [friends]        = useState<Friendship[]>(initialFriends)
-  const [myRecs, setMyRecs] = useState<Pick<Recommendation, 'id' | 'book_id'>[]>(initialMyRecs)
+  const [myRecs, setMyRecs] = useState<Pick<Recommendation, 'id' | 'book_id' | 'recipient_id'>[]>(initialMyRecs)
 
   // Track whether there are unread friend recs since the panel was last opened.
   // Starts false so SSR never renders the badge; a useEffect computes the real
@@ -75,6 +75,8 @@ export default function LibraryRoom({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // intentionally once on mount
 
+  const unfilteredOrderLsKey = `shelfie_unfiltered_order_${userId}`
+
   const [unfilteredOrder, setUnfilteredOrder] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(
       initialSections.map(s => [
@@ -83,6 +85,33 @@ export default function LibraryRoom({
       ])
     )
   )
+
+  // After hydration, restore the unfiltered order from localStorage so it
+  // survives page reloads independently of the filtered-view DB positions.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(unfilteredOrderLsKey)
+      if (!stored) return
+      const parsed = JSON.parse(stored) as Record<string, string[]>
+      setUnfilteredOrder(current =>
+        Object.fromEntries(
+          initialSections.map(s => {
+            const entryIds = new Set(s.entries.map(e => e.id))
+            const storedOrder = (parsed[s.id] ?? []).filter(id => entryIds.has(id))
+            const missing = current[s.id]?.filter(id => !storedOrder.includes(id)) ?? []
+            return [s.id, [...storedOrder, ...missing]]
+          })
+        )
+      )
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // intentionally once on mount
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(unfilteredOrderLsKey, JSON.stringify(unfilteredOrder))
+    } catch { /* ignore */ }
+  }, [unfilteredOrderLsKey, unfilteredOrder])
 
   const handleSectionFilter = (id: string | null) => {
     setIsVisible(false)
@@ -250,22 +279,25 @@ export default function LibraryRoom({
   // Flat list of all entries across all sections — used by StatsPanel
   const allEntries = useMemo(() => sections.flatMap(s => s.entries), [sections])
 
-  const handleRecommendToggle = useCallback(async (entry: ShelfEntry) => {
-    const existing = myRecs.find(r => r.book_id === entry.book_id)
-    if (existing) {
+  const handleFriendRecommendToggle = useCallback(async (entry: ShelfEntry, friendId: string, recommend: boolean) => {
+    if (recommend) {
+      try {
+        const rec = await createRecommendation(userId, entry.book_id, entry.user_rating, friendId)
+        setMyRecs(prev => [...prev, rec])
+      } catch (e) {
+        console.error('Create recommendation failed', e)
+        throw e
+      }
+    } else {
+      const existing = myRecs.find(r => r.book_id === entry.book_id && r.recipient_id === friendId)
+      if (!existing) return
       setMyRecs(prev => prev.filter(r => r.id !== existing.id))
       try {
         await removeRecommendation(existing.id)
       } catch (e) {
         setMyRecs(prev => [...prev, existing])
         console.error('Remove recommendation failed', e)
-      }
-    } else {
-      try {
-        const rec = await createRecommendation(userId, entry.book_id, entry.user_rating)
-        setMyRecs(prev => [...prev, rec])
-      } catch (e) {
-        console.error('Create recommendation failed', e)
+        throw e
       }
     }
   }, [myRecs, userId])
@@ -735,9 +767,10 @@ export default function LibraryRoom({
           onRatingChange={handleRatingChange}
           onRemove={handleBookRemoved}
           onEntryUpdated={handleEntryUpdated}
-          hasFriends={friends.length > 0}
-          isRecommended={myRecs.some(r => r.book_id === selectedEntry.book_id)}
-          onRecommendToggle={() => handleRecommendToggle(selectedEntry)}
+          friends={friends}
+          userId={userId}
+          recommendedToFriendIds={myRecs.filter(r => r.book_id === selectedEntry.book_id).map(r => r.recipient_id)}
+          onFriendRecommendToggle={(friendId, recommend) => handleFriendRecommendToggle(selectedEntry, friendId, recommend)}
         />
       )}
 

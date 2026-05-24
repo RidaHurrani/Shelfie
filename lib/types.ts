@@ -64,6 +64,7 @@ export interface Recommendation {
   id: string
   user_id: string
   book_id: string
+  recipient_id: string
   user_rating: number | null
   note: string | null
   created_at: string

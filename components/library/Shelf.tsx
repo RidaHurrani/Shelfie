@@ -14,6 +14,7 @@ interface ShelfProps {
   shelfIndex?: number
   sectionId?: string
   onDropOnShelf?: (entryId: string, targetShelfIndex: number) => void
+  isFiltered?: boolean
 }
 
 export default function Shelf({
@@ -26,6 +27,7 @@ export default function Shelf({
   shelfIndex,
   sectionId,
   onDropOnShelf,
+  isFiltered = true,
 }: ShelfProps) {
   const [isDragOver, setIsDragOver] = useState(false)
 
@@ -95,6 +97,7 @@ export default function Shelf({
           onSeriesEnter={onSeriesEnter}
           onSeriesLeave={onSeriesLeave}
           onDropOnSpine={onDropOnSpine}
+          isFiltered={isFiltered}
         />
       ))}
     </div>
