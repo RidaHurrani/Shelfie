@@ -72,6 +72,35 @@ export interface Recommendation {
   recommender?: Profile  // present for friends' recs; absent for own
 }
 
+// ── Forums ────────────────────────────────────────────────────────────────────
+
+export interface Forum {
+  id: string
+  book_id: string
+  created_by: string
+  is_active: boolean
+  last_message_at: string
+  created_at: string
+  book: Book
+  members: ForumMember[]
+}
+
+export interface ForumMember {
+  forum_id: string
+  user_id: string
+  joined_at: string
+  profile: Profile
+}
+
+export interface ForumMessage {
+  id: string
+  forum_id: string
+  user_id: string
+  content: string
+  created_at: string
+  profile: Profile
+}
+
 export interface GoogleBookResult {
   id: string
   title: string
