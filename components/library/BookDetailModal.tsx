@@ -38,6 +38,7 @@ export default function BookDetailModal({
   // Friend-picker state
   const [pickerOpen, setPickerOpen] = useState(false)
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
+  const [errorIds, setErrorIds] = useState<Set<string>>(new Set())
   const [nicknames] = useState<Record<string, string>>(() => {
     if (!userId) return {}
     try {
@@ -54,23 +55,34 @@ export default function BookDetailModal({
   const friendDisplayName = (f: Friendship) =>
     nicknames[f.profile.id] ?? f.profile.display_name ?? f.profile.email
 
-  const handleToggleFriend = async (friendId: string) => {
+  // currentIsRec is passed explicitly to avoid reading stale closure state
+  const handleToggleFriend = async (friendId: string, currentIsRec: boolean) => {
     if (togglingIds.has(friendId) || !onFriendRecommendToggle) return
-    const isRec = recommendedToFriendIds.includes(friendId)
     setTogglingIds(prev => new Set(prev).add(friendId))
+    setErrorIds(prev => { const n = new Set(prev); n.delete(friendId); return n })
     try {
-      await onFriendRecommendToggle(friendId, !isRec)
-    } catch { /* parent already logs */ } finally {
+      await onFriendRecommendToggle(friendId, !currentIsRec)
+    } catch {
+      setErrorIds(prev => new Set(prev).add(friendId))
+    } finally {
       setTogglingIds(prev => { const n = new Set(prev); n.delete(friendId); return n })
     }
   }
 
   const handleToggleAll = async () => {
     if (!friends || !onFriendRecommendToggle) return
-    const targets = allRecommended
-      ? friends.map(f => f.profile.id)
-      : friends.filter(f => !recommendedToFriendIds.includes(f.profile.id)).map(f => f.profile.id)
-    await Promise.all(targets.map(id => handleToggleFriend(id)))
+    if (allRecommended) {
+      // Remove all — concurrent is fine, each targets a different DB row
+      await Promise.all(friends.map(f => handleToggleFriend(f.profile.id, true)))
+    } else {
+      // Add sequentially so each insert commits before the next starts,
+      // preventing any race with the unique constraint or React state
+      for (const f of friends) {
+        if (!recommendedToFriendIds.includes(f.profile.id)) {
+          await handleToggleFriend(f.profile.id, false)
+        }
+      }
+    }
   }
 
   // Edit mode state — initialised from current entry
@@ -259,10 +271,11 @@ export default function BookDetailModal({
                           {friends!.map(f => {
                             const isRec = recommendedToFriendIds.includes(f.profile.id)
                             const isLoading = togglingIds.has(f.profile.id)
+                            const hasError = errorIds.has(f.profile.id)
                             return (
                               <button
                                 key={f.id}
-                                onClick={() => handleToggleFriend(f.profile.id)}
+                                onClick={() => handleToggleFriend(f.profile.id, isRec)}
                                 disabled={isLoading}
                                 className="flex items-center gap-2 w-full px-3 py-2 text-left transition-colors disabled:opacity-50"
                                 onMouseEnter={e => { e.currentTarget.style.background = 'rgba(44,24,16,0.5)' }}
@@ -272,16 +285,19 @@ export default function BookDetailModal({
                                   className="w-3.5 h-3.5 rounded-sm border flex items-center justify-center flex-shrink-0 transition-colors"
                                   style={{
                                     background: isRec ? '#D4A55A' : 'transparent',
-                                    borderColor: isRec ? '#D4A55A' : 'rgba(74,44,20,0.7)',
+                                    borderColor: hasError ? '#ef4444' : isRec ? '#D4A55A' : 'rgba(74,44,20,0.7)',
                                   }}
                                 >
                                   {isRec && <Check className="w-2.5 h-2.5 text-[#1C0E06]" />}
                                 </div>
-                                <span className="text-xs truncate" style={{ color: isRec ? '#D4A55A' : '#A08060' }}>
+                                <span className="text-xs truncate" style={{ color: hasError ? '#ef4444' : isRec ? '#D4A55A' : '#A08060' }}>
                                   {friendDisplayName(f)}
                                 </span>
                                 {isLoading && (
                                   <span className="ml-auto text-[10px] text-[#4A2C14] flex-shrink-0">…</span>
+                                )}
+                                {hasError && !isLoading && (
+                                  <span className="ml-auto text-[9px] text-red-400 flex-shrink-0">failed</span>
                                 )}
                               </button>
                             )
