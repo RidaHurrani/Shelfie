@@ -1,5 +1,5 @@
 "use client"
-import { useState, useCallback, useMemo, useEffect } from "react"
+import { useState, useCallback, useMemo, useEffect, useRef } from "react"
 import { SectionWithEntries, ShelfEntry, Section, Book, Friendship, Recommendation } from "@/lib/types"
 import SectionColumn from "./SectionColumn"
 import BookDetailModal from "./BookDetailModal"
@@ -7,7 +7,7 @@ import AddBookModal from "./AddBookModal"
 import CreateSectionModal from "./CreateSectionModal"
 import FriendsPanel from "./FriendsPanel"
 import StatsPanel from "./StatsPanel"
-import { Plus, BookOpen, LogOut, Layers, Users, BarChart2 } from "lucide-react"
+import { Plus, BookOpen, LogOut, Layers, Users, BarChart2, Search } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { deleteSection, moveBookToSection, moveToShelf, reorderSection, createRecommendation, removeRecommendation, addBookFromRecommendation } from "@/lib/mutations"
@@ -279,6 +279,39 @@ export default function LibraryRoom({
 
   // Flat list of all entries across all sections — used by StatsPanel
   const allEntries = useMemo(() => sections.flatMap(s => s.entries), [sections])
+
+  // ── Library search ───────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
+  const searchRef = useRef<HTMLDivElement>(null)
+
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return []
+    return allEntries.filter(e => {
+      const title = (e.custom_title ?? e.book.title).toLowerCase()
+      const authors = e.book.authors.join(' ').toLowerCase()
+      const series = (e.series_name ?? '').toLowerCase()
+      return title.includes(q) || authors.includes(q) || series.includes(q)
+    }).slice(0, 8)
+  }, [searchQuery, allEntries])
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchFocused(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleSearchSelect = (entry: ShelfEntry) => {
+    setSelectedEntry(entry)
+    setSearchQuery('')
+    setSearchFocused(false)
+  }
 
   const handleFriendRecommendToggle = useCallback(async (entry: ShelfEntry, friendId: string, recommend: boolean) => {
     if (recommend) {
@@ -573,7 +606,7 @@ export default function LibraryRoom({
     <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(180deg, #0E0804 0%, #1C1008 30%, #150D06 100%)' }}>
       {/* Header */}
       <header
-        className="flex items-center justify-between px-8 py-4 flex-shrink-0 sticky top-0 z-30"
+        className="flex items-center px-8 py-4 flex-shrink-0 sticky top-0 z-30 gap-6"
         style={{
           background: 'rgba(14,8,4,0.72)',
           backdropFilter: 'blur(20px) saturate(1.4)',
@@ -581,13 +614,89 @@ export default function LibraryRoom({
           borderBottom: '1px solid rgba(74,44,20,0.5)',
         }}
       >
-        <div className="flex items-center gap-3">
+        {/* Logo */}
+        <div className="flex items-center gap-3 flex-shrink-0">
           <BookOpen className="w-7 h-7 text-[#D4A55A]" />
           <h1 className="text-3xl font-bold text-[#D4A55A]" style={{ fontFamily: 'var(--font-playfair)' }}>
             Shelfie
           </h1>
         </div>
-        <div className="flex items-center gap-3">
+
+        {/* Search — centre */}
+        <div ref={searchRef} className="flex-1 max-w-md mx-auto relative">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: '#6B4020' }} />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              placeholder="Search your library…"
+              className="w-full pl-9 pr-4 py-2 text-sm rounded-xl focus:outline-none transition-colors"
+              style={{
+                background: 'rgba(44,24,16,0.5)',
+                border: '1px solid rgba(74,44,20,0.5)',
+                color: '#F5E6C8',
+              }}
+              onMouseEnter={e => { if (document.activeElement !== e.currentTarget) e.currentTarget.style.borderColor = 'rgba(74,44,20,0.8)' }}
+              onMouseLeave={e => { if (document.activeElement !== e.currentTarget) e.currentTarget.style.borderColor = 'rgba(74,44,20,0.5)' }}
+              onFocusCapture={e => { e.currentTarget.style.borderColor = 'rgba(212,165,90,0.5)' }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'rgba(74,44,20,0.5)' }}
+            />
+          </div>
+
+          {/* Dropdown */}
+          {searchFocused && searchResults.length > 0 && (
+            <div
+              className="absolute top-full left-0 right-0 mt-1.5 rounded-xl overflow-hidden z-50"
+              style={{
+                background: '#140A04',
+                border: '1px solid rgba(74,44,20,0.6)',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+              }}
+            >
+              {searchResults.map(entry => {
+                const title = entry.custom_title ?? entry.book.title
+                const author = entry.book.authors[0]
+                return (
+                  <button
+                    key={entry.id}
+                    onMouseDown={() => handleSearchSelect(entry)}
+                    className="flex items-center gap-3 w-full px-4 py-2.5 text-left transition-colors"
+                    style={{ borderBottom: '1px solid rgba(74,44,20,0.2)' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(44,24,16,0.7)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                  >
+                    {entry.book.cover_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={entry.book.cover_url} alt="" className="rounded flex-shrink-0" style={{ width: 24, height: 36, objectFit: 'cover' }} />
+                    ) : (
+                      <div className="rounded flex-shrink-0 flex items-center justify-center" style={{ width: 24, height: 36, background: 'rgba(59,31,14,0.6)' }}>
+                        <BookOpen className="w-3 h-3" style={{ color: '#3B1F0E' }} />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm text-[#F5E6C8] truncate">{title}</p>
+                      {author && <p className="text-xs text-[#6B4020] truncate">{author}</p>}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {/* No results hint */}
+          {searchFocused && searchQuery.trim().length > 0 && searchResults.length === 0 && (
+            <div
+              className="absolute top-full left-0 right-0 mt-1.5 rounded-xl px-4 py-3 z-50"
+              style={{ background: '#140A04', border: '1px solid rgba(74,44,20,0.6)' }}
+            >
+              <p className="text-xs text-[#4A2C14]">No books found in your library</p>
+            </div>
+          )}
+        </div>
+        {/* Right controls */}
+        <div className="flex items-center gap-3 flex-shrink-0">
           <select
             value={activeSectionId ?? ''}
             onChange={(e) => handleSectionFilter(e.target.value || null)}
