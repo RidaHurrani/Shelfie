@@ -61,19 +61,9 @@ export default function LibraryRoom({
   const [friends]        = useState<Friendship[]>(initialFriends)
   const [myRecs, setMyRecs] = useState<Pick<Recommendation, 'id' | 'book_id' | 'recipient_id'>[]>(initialMyRecs)
 
-  // Track whether there are unread friend recs since the panel was last opened.
-  // Starts false so SSR never renders the badge; a useEffect computes the real
-  // value client-side (where localStorage is actually available).
-  const recsLsKey = `shelfie_last_viewed_recs_${userId}`
-  const [hasNewRecs, setHasNewRecs] = useState(false)
-  useEffect(() => {
-    const stored = localStorage.getItem(recsLsKey)
-    const lastViewed = stored ? new Date(stored) : new Date(0)
-    if (initialFriendsRecs.some(r => new Date(r.created_at) > lastViewed)) {
-      setHasNewRecs(true)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // intentionally once on mount
+  // hasAnyUnseen is reported up from FriendsPanel via onUnseenChange.
+  // Starts false (no badge on SSR); FriendsPanel hydrates it on first render.
+  const [hasAnyUnseen, setHasAnyUnseen] = useState(false)
 
   const unfilteredOrderLsKey = `shelfie_unfiltered_order_${userId}`
 
@@ -632,13 +622,7 @@ export default function LibraryRoom({
           {/* Friends panel toggle */}
           <button
             onClick={() => {
-              const opening = !showFriendsPanel
-              setShowFriendsPanel(opening)
-              if (opening) {
-                // Mark all current recs as seen the moment the panel opens
-                setHasNewRecs(false)
-                try { localStorage.setItem(recsLsKey, new Date().toISOString()) } catch { /* ignore */ }
-              }
+              setShowFriendsPanel(v => !v)
             }}
             className="relative p-2 transition-colors"
             style={{ color: showFriendsPanel ? '#D4A55A' : '#6B4020' }}
@@ -647,13 +631,11 @@ export default function LibraryRoom({
             title="Friends & Recommendations"
           >
             <Users className="w-4 h-4" />
-            {(initialPendingRequests.length > 0 || hasNewRecs) && !showFriendsPanel && (
+            {hasAnyUnseen && !showFriendsPanel && (
               <span
                 className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full text-white text-[8px] flex items-center justify-center font-bold"
                 style={{ background: '#8B2635' }}
-              >
-                {initialPendingRequests.length > 0 ? initialPendingRequests.length : '!'}
-              </span>
+              >!</span>
             )}
           </button>
 
@@ -763,6 +745,7 @@ export default function LibraryRoom({
           myRecs={myRecs}
           allEntries={allEntries}
           onRemoveMyRec={handleRemoveMyRec}
+          onUnseenChange={setHasAnyUnseen}
         />
       )}
 

@@ -23,6 +23,7 @@ interface FriendsPanelProps {
   myRecs: Pick<Recommendation, 'id' | 'book_id' | 'recipient_id'>[]
   allEntries: ShelfEntry[]
   onRemoveMyRec: (recId: string) => void
+  onUnseenChange?: (hasNew: boolean) => void
 }
 
 function timeAgo(dateStr: string): string {
@@ -48,9 +49,10 @@ export default function FriendsPanel({
   myRecs,
   allEntries,
   onRemoveMyRec,
+  onUnseenChange,
 }: FriendsPanelProps) {
   const [tab, setTab] = useState<'feed' | 'sent' | 'forums' | 'friends'>('feed')
-  const [recs]                       = useState<Recommendation[]>(initialRecs)
+  const [recs, setRecs]              = useState<Recommendation[]>(initialRecs)
   const [friends, setFriends]        = useState<Friendship[]>(initialFriends)
   const [pending, setPending]        = useState<Friendship[]>(initialPending)
 
@@ -59,6 +61,42 @@ export default function FriendsPanel({
   const [searchResults, setSearchResults] = useState<Profile[]>([])
   const [searching, setSearching]         = useState(false)
   const [sentRequests, setSentRequests]   = useState<Set<string>>(new Set())
+
+  // ── Per-tab notification tracking ────────────────────────────────────────
+  const lsKeyFeed       = `shelfie_last_seen_feed_${userId}`
+  const lsKeyForums     = `shelfie_last_seen_forums_${userId}`
+  const lsKeyForumsSeen = `shelfie_forum_seen_${userId}`
+
+  const [lastSeenFeed, setLastSeenFeed] = useState<Date>(() => {
+    try { const s = localStorage.getItem(`shelfie_last_seen_feed_${userId}`); return s ? new Date(s) : new Date(0) } catch { return new Date(0) }
+  })
+  const [lastSeenForums, setLastSeenForums] = useState<Date>(() => {
+    try { const s = localStorage.getItem(`shelfie_last_seen_forums_${userId}`); return s ? new Date(s) : new Date(0) } catch { return new Date(0) }
+  })
+  // Per-forum seen map: forumId → ISO timestamp of when it was last opened
+  const [forumSeenMap, setForumSeenMap] = useState<Record<string, string>>(() => {
+    try { const s = localStorage.getItem(`shelfie_forum_seen_${userId}`); return s ? JSON.parse(s) : {} } catch { return {} }
+  })
+
+  const markForumSeen = (forumId: string) => {
+    const now = new Date().toISOString()
+    setForumSeenMap(prev => {
+      const updated = { ...prev, [forumId]: now }
+      try { localStorage.setItem(lsKeyForumsSeen, JSON.stringify(updated)) } catch { /* ignore */ }
+      return updated
+    })
+  }
+
+  const markTabSeen = (t: 'feed' | 'sent' | 'forums' | 'friends') => {
+    const now = new Date().toISOString()
+    if (t === 'feed') {
+      setLastSeenFeed(new Date(now))
+      try { localStorage.setItem(lsKeyFeed, now) } catch { /* ignore */ }
+    } else if (t === 'forums') {
+      setLastSeenForums(new Date(now))
+      try { localStorage.setItem(lsKeyForums, now) } catch { /* ignore */ }
+    }
+  }
 
   // Nicknames (localStorage, client-only mount)
   const nicknameLsKey = `shelfie_friend_nicknames_${userId}`
@@ -111,6 +149,31 @@ export default function FriendsPanel({
       .catch(() => {})
       .finally(() => setLoadingForums(false))
   }, [tab])
+
+  // Background poll: keep recs, pending, and forums fresh every 30 s
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const [recsRes, pendingRes, forumsRes] = await Promise.all([
+          fetch('/api/recs'),
+          fetch('/api/friends/pending'),
+          fetch('/api/forums'),
+        ])
+        const [recsData, pendingData, forumsData] = await Promise.all([
+          recsRes.ok ? recsRes.json() : null,
+          pendingRes.ok ? pendingRes.json() : null,
+          forumsRes.ok ? forumsRes.json() : null,
+        ])
+        if (Array.isArray(recsData))    setRecs(recsData)
+        if (Array.isArray(pendingData)) setPending(pendingData)
+        if (Array.isArray(forumsData))  setForums(forumsData)
+      } catch { /* ignore */ }
+    }
+    poll() // initial fetch to hydrate badges right away
+    const interval = setInterval(poll, 30000)
+    return () => clearInterval(interval)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Poll messages while a forum is open
   useEffect(() => {
@@ -191,6 +254,8 @@ export default function FriendsPanel({
     setActiveForum(forum)
     setShowInvite(false)
     setMessages([])
+    markTabSeen('forums')
+    markForumSeen(forum.id)
   }
 
   const closeForum = () => {
@@ -269,6 +334,15 @@ export default function FriendsPanel({
     return nicknames[uid] ?? f?.profile.display_name ?? f?.profile.email ?? uid
   }
 
+  // ── Unseen badge computation ─────────────────────────────────────────────
+  const feedHasNew   = recs.some(r => new Date(r.created_at) > lastSeenFeed)
+  const forumsHasNew = forums.some(f => new Date(f.last_message_at) > lastSeenForums)
+  const hasAnyUnseen = feedHasNew || forumsHasNew || pending.length > 0
+
+  useEffect(() => {
+    onUnseenChange?.(hasAnyUnseen)
+  }, [hasAnyUnseen, onUnseenChange])
+
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       {/* Backdrop */}
@@ -309,7 +383,7 @@ export default function FriendsPanel({
           {(['feed', 'sent', 'forums', 'friends'] as const).map(t => (
             <button
               key={t}
-              onClick={() => { setTab(t); if (t !== 'forums') closeForum() }}
+              onClick={() => { setTab(t); if (t !== 'forums') closeForum(); markTabSeen(t) }}
               className={`flex-1 py-2.5 text-xs relative transition-colors ${
                 tab === t ? 'text-[#D4A55A]' : 'text-[#4A2C14] hover:text-[#6B4020]'
               }`}
@@ -321,6 +395,18 @@ export default function FriendsPanel({
                 >
                   {pending.length}
                 </span>
+              )}
+              {t === 'feed' && feedHasNew && tab !== 'feed' && (
+                <span
+                  className="absolute top-1.5 right-1.5 w-3.5 h-3.5 rounded-full text-white text-[8px] flex items-center justify-center font-bold"
+                  style={{ background: '#8B2635' }}
+                >!</span>
+              )}
+              {t === 'forums' && forumsHasNew && tab !== 'forums' && (
+                <span
+                  className="absolute top-1.5 right-1.5 w-3.5 h-3.5 rounded-full text-white text-[8px] flex items-center justify-center font-bold"
+                  style={{ background: '#8B2635' }}
+                >!</span>
               )}
               {t === 'feed' ? 'Rec Feed' : t === 'sent' ? 'My Recs' : t === 'forums' ? 'Forums' : 'Friends'}
               {tab === t && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#D4A55A]" />}
@@ -420,11 +506,13 @@ export default function FriendsPanel({
                 const memberNames = forum.members
                   .map(m => nicknames[m.user_id] ?? m.profile?.display_name ?? m.profile?.email ?? '?')
                   .join(', ')
+                const lastSeen = forumSeenMap[forum.id] ? new Date(forumSeenMap[forum.id]) : new Date(0)
+                const hasUnread = new Date(forum.last_message_at) > lastSeen
                 return (
                   <button
                     key={forum.id}
                     onClick={() => openForum(forum)}
-                    className="p-3 rounded-xl text-left w-full transition-colors"
+                    className="p-3 rounded-xl text-left w-full transition-colors relative"
                     style={{ background: 'rgba(44,24,16,0.45)', border: '1px solid rgba(74,44,20,0.3)' }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(212,165,90,0.4)' }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(74,44,20,0.3)' }}
@@ -443,7 +531,15 @@ export default function FriendsPanel({
                         <p className="text-[10px] text-[#6B4020] truncate mt-0.5">{memberNames}</p>
                         <p className="text-[10px] text-[#3B1F0E] mt-1">{timeAgo(forum.last_message_at)}</p>
                       </div>
-                      <MessageSquare className="w-3.5 h-3.5 text-[#4A2C14] flex-shrink-0 mt-0.5" />
+                      <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+                        {hasUnread && (
+                          <span
+                            className="w-3.5 h-3.5 rounded-full text-white text-[8px] flex items-center justify-center font-bold"
+                            style={{ background: '#8B2635' }}
+                          >!</span>
+                        )}
+                        <MessageSquare className="w-3.5 h-3.5 text-[#4A2C14]" />
+                      </div>
                     </div>
                   </button>
                 )
