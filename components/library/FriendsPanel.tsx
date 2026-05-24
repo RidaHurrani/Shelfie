@@ -1,13 +1,14 @@
 "use client"
 import { useState, useEffect } from "react"
-import { X, Users, Search, UserPlus, Check, BookOpen, UserMinus, BookPlus, Pencil } from "lucide-react"
-import { Friendship, Recommendation, Profile, Section, Book } from "@/lib/types"
+import { X, Users, Search, UserPlus, Check, BookOpen, UserMinus, BookPlus, Pencil, Send } from "lucide-react"
+import { Friendship, Recommendation, Profile, Section, Book, ShelfEntry } from "@/lib/types"
 import StarRating from "./StarRating"
 import {
   sendFriendRequest,
   acceptFriendRequest,
   declineFriendRequest,
   removeFriend,
+  removeRecommendation,
   DuplicateBookError,
 } from "@/lib/mutations"
 
@@ -19,6 +20,9 @@ interface FriendsPanelProps {
   sections: Section[]
   onAddToLibrary: (book: Book, sectionId: string) => Promise<void>
   onClose: () => void
+  myRecs: Pick<Recommendation, 'id' | 'book_id' | 'recipient_id'>[]
+  allEntries: ShelfEntry[]
+  onRemoveMyRec: (recId: string) => void
 }
 
 function timeAgo(dateStr: string): string {
@@ -41,8 +45,11 @@ export default function FriendsPanel({
   sections,
   onAddToLibrary,
   onClose,
+  myRecs,
+  allEntries,
+  onRemoveMyRec,
 }: FriendsPanelProps) {
-  const [tab, setTab] = useState<'feed' | 'friends'>('feed')
+  const [tab, setTab] = useState<'feed' | 'sent' | 'friends'>('feed')
   const [recs]          = useState<Recommendation[]>(initialRecs)
   const [friends, setFriends]   = useState<Friendship[]>(initialFriends)
   const [pending, setPending]   = useState<Friendship[]>(initialPending)
@@ -65,6 +72,7 @@ export default function FriendsPanel({
   })
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [nicknameInput, setNicknameInput] = useState('')
+  const [unsendingIds, setUnsendingIds] = useState<Set<string>>(new Set())
 
   // Debounced user search
   useEffect(() => {
@@ -123,6 +131,19 @@ export default function FriendsPanel({
     setEditingUserId(null)
   }
 
+  const handleUnsend = async (recId: string) => {
+    if (unsendingIds.has(recId)) return
+    setUnsendingIds(prev => new Set(prev).add(recId))
+    try {
+      await removeRecommendation(recId)
+      onRemoveMyRec(recId)
+    } catch (e) {
+      console.error('Unsend failed', e)
+    } finally {
+      setUnsendingIds(prev => { const n = new Set(prev); n.delete(recId); return n })
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       {/* Backdrop */}
@@ -169,23 +190,23 @@ export default function FriendsPanel({
           className="flex flex-shrink-0"
           style={{ borderBottom: '1px solid rgba(74,44,20,0.4)' }}
         >
-          {(['feed', 'friends'] as const).map(t => (
+          {(['feed', 'sent', 'friends'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`flex-1 py-2.5 text-sm capitalize relative transition-colors ${
+              className={`flex-1 py-2.5 text-sm relative transition-colors ${
                 tab === t ? 'text-[#D4A55A]' : 'text-[#4A2C14] hover:text-[#6B4020]'
               }`}
             >
               {t === 'friends' && pending.length > 0 && (
                 <span
-                  className="absolute top-1.5 right-[calc(25%-4px)] w-4 h-4 rounded-full text-white text-[9px] flex items-center justify-center font-bold"
+                  className="absolute top-1.5 right-[calc(16%-4px)] w-4 h-4 rounded-full text-white text-[9px] flex items-center justify-center font-bold"
                   style={{ background: '#8B2635' }}
                 >
                   {pending.length}
                 </span>
               )}
-              {t === 'feed' ? 'Rec Feed' : 'Friends'}
+              {t === 'feed' ? 'Rec Feed' : t === 'sent' ? 'My Recs' : 'Friends'}
               {tab === t && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#D4A55A]" />
               )}
@@ -210,6 +231,95 @@ export default function FriendsPanel({
               ) : recs.map(rec => (
                 <RecCard key={rec.id} rec={rec} sections={sections} onAddToLibrary={onAddToLibrary} nicknames={nicknames} />
               ))}
+            </div>
+          )}
+
+          {/* ── Sent tab ─────────────────────────────────────────────── */}
+          {tab === 'sent' && (
+            <div className="p-4 flex flex-col gap-3">
+              {myRecs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-52 text-center">
+                  <Send className="w-10 h-10 mb-3" style={{ color: '#2C1810' }} />
+                  <p className="text-sm" style={{ color: '#4A2C14' }}>No recommendations sent yet</p>
+                  <p className="text-xs mt-1" style={{ color: '#2C1810' }}>
+                    Click a book and recommend it to a friend
+                  </p>
+                </div>
+              ) : (() => {
+                // Group recs by book_id
+                const grouped = new Map<string, Pick<Recommendation, 'id' | 'book_id' | 'recipient_id'>[]>()
+                for (const rec of myRecs) {
+                  if (!grouped.has(rec.book_id)) grouped.set(rec.book_id, [])
+                  grouped.get(rec.book_id)!.push(rec)
+                }
+                return [...grouped.entries()].map(([bookId, bookRecs]) => {
+                  const entry = allEntries.find(e => e.book_id === bookId)
+                  const book = entry?.book
+                  return (
+                    <div
+                      key={bookId}
+                      className="p-3 rounded-xl"
+                      style={{ background: 'rgba(44,24,16,0.45)', border: '1px solid rgba(74,44,20,0.3)' }}
+                    >
+                      {/* Book row */}
+                      <div className="flex items-start gap-3 mb-2.5">
+                        {book?.cover_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={book.cover_url}
+                            alt=""
+                            className="rounded flex-shrink-0"
+                            style={{ width: 32, height: 48, objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <div
+                            className="rounded flex-shrink-0 flex items-center justify-center"
+                            style={{ width: 32, height: 48, background: 'rgba(59,31,14,0.6)' }}
+                          >
+                            <BookOpen className="w-3 h-3 text-[#3B1F0E]" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-[#F5E6C8] leading-snug line-clamp-2">
+                            {book?.title ?? 'Unknown book'}
+                          </p>
+                          {book?.authors?.[0] && (
+                            <p className="text-xs text-[#6B4020] truncate mt-0.5">{book.authors[0]}</p>
+                          )}
+                        </div>
+                      </div>
+                      {/* Recipients */}
+                      <div
+                        className="flex flex-col gap-1 pt-2"
+                        style={{ borderTop: '1px solid rgba(74,44,20,0.25)' }}
+                      >
+                        {bookRecs.map(rec => {
+                          const friend = friends.find(f => f.profile.id === rec.recipient_id)
+                          const name = nicknames[rec.recipient_id]
+                            ?? friend?.profile.display_name
+                            ?? friend?.profile.email
+                            ?? rec.recipient_id
+                          return (
+                            <div key={rec.id} className="flex items-center justify-between">
+                              <p className="text-xs text-[#A08060]">
+                                <span className="text-[#4A2C14] mr-1">→</span>{name}
+                              </p>
+                              <button
+                                onClick={() => handleUnsend(rec.id)}
+                                disabled={unsendingIds.has(rec.id)}
+                                className="p-1 text-[#4A2C14] hover:text-red-400 transition-colors disabled:opacity-40"
+                                title="Unsend"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })
+              })()}
             </div>
           )}
 

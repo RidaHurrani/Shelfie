@@ -302,6 +302,10 @@ export default function LibraryRoom({
     }
   }, [myRecs, userId])
 
+  const handleRemoveMyRec = useCallback((recId: string) => {
+    setMyRecs(prev => prev.filter(r => r.id !== recId))
+  }, [])
+
   const handleAddFromRec = useCallback(async (book: Book, sectionId: string) => {
     const section = sections.find(s => s.id === sectionId)
     const count = section?.entries.length ?? 0
@@ -756,6 +760,9 @@ export default function LibraryRoom({
           sections={sections}
           onAddToLibrary={handleAddFromRec}
           onClose={() => setShowFriendsPanel(false)}
+          myRecs={myRecs}
+          allEntries={allEntries}
+          onRemoveMyRec={handleRemoveMyRec}
         />
       )}
 
