@@ -1,26 +1,42 @@
 "use client"
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { BookOpen } from "lucide-react"
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const [ready, setReady]         = useState(false)   // true once session established
+  const [exchangeErr, setExchangeErr] = useState("")
+
   const [password, setPassword]   = useState("")
   const [confirm, setConfirm]     = useState("")
   const [loading, setLoading]     = useState(false)
   const [errorMsg, setErrorMsg]   = useState("")
   const [done, setDone]           = useState(false)
 
+  // Exchange the code Supabase appends to the URL for a live session
+  useEffect(() => {
+    const code = searchParams.get('code')
+    if (!code) {
+      setExchangeErr("Invalid or missing reset link. Please request a new one.")
+      return
+    }
+    const supabase = createClient()
+    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+      if (error) {
+        setExchangeErr("This reset link has expired or already been used. Please request a new one.")
+      } else {
+        setReady(true)
+      }
+    })
+  }, [searchParams])
+
   const onSubmit = async () => {
-    if (password.length < 6) {
-      setErrorMsg("Password must be at least 6 characters.")
-      return
-    }
-    if (password !== confirm) {
-      setErrorMsg("Passwords don't match.")
-      return
-    }
+    if (password.length < 6) { setErrorMsg("Password must be at least 6 characters."); return }
+    if (password !== confirm)  { setErrorMsg("Passwords don't match."); return }
     setLoading(true)
     setErrorMsg("")
     try {
@@ -51,7 +67,27 @@ export default function ResetPasswordPage() {
         </div>
 
         <div className="bg-[#2C1810] border border-[#4A2C14] rounded-2xl p-8 shadow-2xl">
-          {done ? (
+
+          {/* Exchange error */}
+          {exchangeErr && (
+            <div className="flex flex-col items-center text-center py-4">
+              <p className="text-sm text-red-400 mb-6">{exchangeErr}</p>
+              <button
+                onClick={() => router.push("/login")}
+                className="text-sm text-[#D4A55A] hover:underline"
+              >
+                ← Back to sign in
+              </button>
+            </div>
+          )}
+
+          {/* Loading while exchanging code */}
+          {!exchangeErr && !ready && (
+            <p className="text-sm text-center text-[#A08060] py-8">Verifying reset link…</p>
+          )}
+
+          {/* Success */}
+          {done && (
             <div className="flex flex-col items-center text-center py-4">
               <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4" style={{ background: 'rgba(212,165,90,0.15)', border: '1px solid rgba(212,165,90,0.3)' }}>
                 <span className="text-2xl">✓</span>
@@ -61,16 +97,17 @@ export default function ResetPasswordPage() {
               </h2>
               <p className="text-sm text-[#A08060]">Taking you to your library…</p>
             </div>
-          ) : (
+          )}
+
+          {/* Password form */}
+          {ready && !done && (
             <>
               <h2 className="text-2xl font-semibold text-[#F5E6C8] mb-2" style={{ fontFamily: 'var(--font-playfair)' }}>
                 Choose a new password
               </h2>
               <p className="text-sm text-[#A08060] mb-6">Pick something you&apos;ll remember.</p>
 
-              {errorMsg && (
-                <p className="text-sm text-red-400 mb-4">{errorMsg}</p>
-              )}
+              {errorMsg && <p className="text-sm text-red-400 mb-4">{errorMsg}</p>}
 
               <div className="space-y-4">
                 <div className="flex flex-col gap-1">
@@ -109,8 +146,21 @@ export default function ResetPasswordPage() {
               </button>
             </>
           )}
+
         </div>
       </div>
     </div>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-[#1C1008]">
+        <p className="text-[#A08060] text-sm">Loading…</p>
+      </div>
+    }>
+      <ResetPasswordForm />
+    </Suspense>
   )
 }
