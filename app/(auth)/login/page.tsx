@@ -1,11 +1,23 @@
 "use client"
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { BookOpen } from "lucide-react"
 
-export default function LoginPage() {
+// If Supabase redirects a password-reset code to this page (via site-URL
+// fallback), forward it straight to the reset-password page.
+function CodeForwarder() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    const code = searchParams.get('code')
+    if (code) router.replace(`/reset-password?code=${code}`)
+  }, [searchParams, router])
+  return null
+}
+
+function LoginForm() {
   const router = useRouter()
   const [email, setEmail]       = useState("")
   const [password, setPassword] = useState("")
@@ -206,5 +218,14 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <CodeForwarder />
+      <LoginForm />
+    </Suspense>
   )
 }
