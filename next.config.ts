@@ -15,9 +15,11 @@ const nextConfig: NextConfig = {
   },
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default withPWA({
   dest: "public",
   register: true,
   skipWaiting: true,
   disable: process.env.NODE_ENV === "development",
+// @ts-expect-error — @types/next-pwa bundles stale Next.js types incompatible with Next 16
 })(nextConfig);
