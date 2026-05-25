@@ -7,7 +7,7 @@ import AddBookModal from "./AddBookModal"
 import CreateSectionModal from "./CreateSectionModal"
 import FriendsPanel from "./FriendsPanel"
 import StatsPanel from "./StatsPanel"
-import { Plus, BookOpen, LogOut, Layers, Users, BarChart2, Search } from "lucide-react"
+import { Plus, BookOpen, LogOut, Layers, Users, BarChart2, Search, X } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { deleteSection, moveBookToSection, moveToShelf, reorderSection, createRecommendation, removeRecommendation, addBookFromRecommendation } from "@/lib/mutations"
@@ -626,7 +626,7 @@ export default function LibraryRoom({
         </div>
 
         {/* Search — hidden on mobile unless expanded; always visible sm+ */}
-        <div ref={searchRef} className={`${searchExpanded ? 'flex' : 'hidden sm:flex'} flex-1 max-w-md mx-auto relative`}>
+        <div ref={searchRef} className="hidden sm:flex flex-1 max-w-md mx-auto relative">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: '#6B4020' }} />
             <input
@@ -797,8 +797,80 @@ export default function LibraryRoom({
         </div>
         </div>{/* end main icon row */}
 
-        {/* ── Mobile-only: section filter row ── */}
-        <div className="flex sm:hidden items-center w-full pb-3">
+        {/* ── Mobile-only: full-width search bar (shown when expanded) ── */}
+        {searchExpanded && (
+          <div className="sm:hidden flex w-full pb-2 relative">
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: '#6B4020' }} />
+              <input
+                type="text"
+                value={searchQuery}
+                autoFocus
+                onChange={e => setSearchQuery(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                placeholder="Search your library…"
+                className="w-full pl-10 pr-9 py-2.5 text-sm rounded-xl focus:outline-none"
+                style={{
+                  background: 'rgba(44,24,16,0.5)',
+                  border: '1px solid rgba(212,165,90,0.4)',
+                  color: '#F5E6C8',
+                }}
+              />
+              {searchQuery && (
+                <button
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B4020] hover:text-[#A08060]"
+                  onMouseDown={() => setSearchQuery('')}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            {/* Results dropdown */}
+            {searchFocused && searchResults.length > 0 && (
+              <div
+                className="absolute top-full left-0 right-0 mt-1 rounded-xl overflow-hidden z-50"
+                style={{ background: '#140A04', border: '1px solid rgba(74,44,20,0.6)', boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}
+              >
+                {searchResults.map(entry => {
+                  const title = entry.custom_title ?? entry.book.title
+                  const author = entry.book.authors[0]
+                  return (
+                    <button
+                      key={entry.id}
+                      onMouseDown={() => { handleSearchSelect(entry); setSearchExpanded(false) }}
+                      className="flex items-center gap-3 w-full px-4 py-2.5 text-left"
+                      style={{ borderBottom: '1px solid rgba(74,44,20,0.2)' }}
+                    >
+                      {entry.book.cover_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={entry.book.cover_url} alt="" className="rounded flex-shrink-0" style={{ width: 24, height: 36, objectFit: 'cover' }} />
+                      ) : (
+                        <div className="rounded flex-shrink-0 flex items-center justify-center" style={{ width: 24, height: 36, background: 'rgba(59,31,14,0.6)' }}>
+                          <BookOpen className="w-3 h-3" style={{ color: '#3B1F0E' }} />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm text-[#F5E6C8] truncate">{title}</p>
+                        {author && <p className="text-xs text-[#6B4020] truncate">{author}</p>}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {searchFocused && searchQuery.trim().length > 0 && searchResults.length === 0 && (
+              <div
+                className="absolute top-full left-0 right-0 mt-1 rounded-xl px-4 py-3 z-50"
+                style={{ background: '#140A04', border: '1px solid rgba(74,44,20,0.6)' }}
+              >
+                <p className="text-xs text-[#4A2C14]">No books found in your library</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Mobile-only: section filter + new section button ── */}
+        <div className="flex sm:hidden items-center w-full pb-3 gap-2">
           <select
             value={activeSectionId ?? ''}
             onChange={(e) => handleSectionFilter(e.target.value || null)}
@@ -824,6 +896,15 @@ export default function LibraryRoom({
               <option key={s.id} value={s.id} style={{ background: '#1C0E06' }}>{s.name}</option>
             ))}
           </select>
+          {/* New Section button */}
+          <button
+            onClick={() => setShowCreateSection(true)}
+            className="flex-shrink-0 p-2 rounded-lg transition-colors"
+            style={{ background: 'rgba(44,24,16,0.7)', border: '1px solid rgba(74,44,20,0.5)', color: '#D4A55A' }}
+            title="New Section"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
         </div>
       </header>
 
