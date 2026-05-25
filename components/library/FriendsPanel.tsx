@@ -110,6 +110,7 @@ export default function FriendsPanel({
   const [nicknameInput, setNicknameInput] = useState('')
 
   const [unsendingIds, setUnsendingIds] = useState<Set<string>>(new Set())
+  const [feedFilter, setFeedFilter] = useState<string | null>(null)
 
   // ── Forums state ───────────────────────────────────────────────────────────
   const [forums, setForums]               = useState<Forum[]>([])
@@ -426,9 +427,49 @@ export default function FriendsPanel({
                   <p className="text-sm" style={{ color: '#4A2C14' }}>No recommendations yet</p>
                   <p className="text-xs mt-1" style={{ color: '#2C1810' }}>Add friends and their recs will appear here</p>
                 </div>
-              ) : recs.map(rec => (
-                <RecCard key={rec.id} rec={rec} sections={sections} onAddToLibrary={onAddToLibrary} nicknames={nicknames} />
-              ))}
+              ) : (() => {
+                // Unique recommenders in this feed
+                const seen = new Set<string>()
+                const recommenders = recs
+                  .filter(r => { if (seen.has(r.user_id)) return false; seen.add(r.user_id); return true })
+                  .map(r => ({ id: r.user_id, name: nicknames[r.user_id] ?? r.recommender?.display_name ?? r.recommender?.email ?? 'Someone' }))
+
+                const filtered = feedFilter ? recs.filter(r => r.user_id === feedFilter) : recs
+
+                return (
+                  <>
+                    {recommenders.length >= 2 && (
+                      <select
+                        value={feedFilter ?? ''}
+                        onChange={e => setFeedFilter(e.target.value || null)}
+                        style={{
+                          background: 'rgba(44,24,16,0.7)',
+                          border: '1px solid rgba(74,44,20,0.6)',
+                          color: feedFilter ? '#D4A55A' : '#A08060',
+                          borderRadius: '8px',
+                          padding: '5px 26px 5px 10px',
+                          fontSize: '11px',
+                          cursor: 'pointer',
+                          outline: 'none',
+                          appearance: 'none',
+                          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23A08060'/%3E%3C/svg%3E")`,
+                          backgroundRepeat: 'no-repeat',
+                          backgroundPosition: 'right 8px center',
+                          alignSelf: 'flex-start',
+                        }}
+                      >
+                        <option value="" style={{ background: '#1C0E06', color: '#A08060' }}>All friends</option>
+                        {recommenders.map(r => (
+                          <option key={r.id} value={r.id} style={{ background: '#1C0E06', color: '#F5E6C8' }}>{r.name}</option>
+                        ))}
+                      </select>
+                    )}
+                    {filtered.map(rec => (
+                      <RecCard key={rec.id} rec={rec} sections={sections} onAddToLibrary={onAddToLibrary} nicknames={nicknames} />
+                    ))}
+                  </>
+                )
+              })()}
             </div>
           )}
 
