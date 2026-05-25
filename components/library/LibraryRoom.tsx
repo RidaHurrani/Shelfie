@@ -607,7 +607,7 @@ export default function LibraryRoom({
     <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(180deg, #0E0804 0%, #1C1008 30%, #150D06 100%)' }}>
       {/* Header */}
       <header
-        className="flex items-center px-4 sm:px-8 py-4 flex-shrink-0 sticky top-0 z-30 gap-3 sm:gap-6"
+        className="flex flex-col px-4 sm:px-8 flex-shrink-0 sticky top-0 z-30"
         style={{
           background: 'rgba(14,8,4,0.72)',
           backdropFilter: 'blur(20px) saturate(1.4)',
@@ -615,6 +615,8 @@ export default function LibraryRoom({
           borderBottom: '1px solid rgba(74,44,20,0.5)',
         }}
       >
+        {/* ── Main icon row ── */}
+        <div className="flex items-center w-full py-4 gap-3 sm:gap-6">
         {/* Logo */}
         <div className="flex items-center gap-3 flex-shrink-0">
           <BookOpen className="w-7 h-7 text-[#D4A55A]" />
@@ -709,25 +711,25 @@ export default function LibraryRoom({
             <Search className="w-4 h-4" />
           </button>
 
-          {/* Section filter — visible on all screen sizes */}
+          {/* Desktop-only: section filter + add bookcase / new section */}
+          <div className="hidden sm:flex items-center gap-3">
           <select
             value={activeSectionId ?? ''}
             onChange={(e) => handleSectionFilter(e.target.value || null)}
-            className="max-w-[108px] sm:max-w-none"
             style={{
               background: 'rgba(44,24,16,0.7)',
               border: '1px solid rgba(74,44,20,0.7)',
               color: activeSectionId ? '#D4A55A' : '#A08060',
               borderRadius: '8px',
-              padding: '6px 24px 6px 10px',
-              fontSize: '12px',
+              padding: '6px 28px 6px 12px',
+              fontSize: '13px',
               fontFamily: 'var(--font-playfair)',
               cursor: 'pointer',
               outline: 'none',
               appearance: 'none',
               backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23A08060'/%3E%3C/svg%3E")`,
               backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 8px center',
+              backgroundPosition: 'right 10px center',
             }}
           >
             <option value="" style={{ background: '#1C0E06' }}>All Sections</option>
@@ -735,9 +737,6 @@ export default function LibraryRoom({
               <option key={s.id} value={s.id} style={{ background: '#1C0E06' }}>{s.name}</option>
             ))}
           </select>
-
-          {/* Desktop-only: add bookcase / new section button */}
-          <div className="hidden sm:flex items-center gap-3">
           {activeSectionId ? (
             <button
               onClick={handleAddBookcase}
@@ -795,6 +794,36 @@ export default function LibraryRoom({
           >
             <LogOut className="w-4 h-4" />
           </button>
+        </div>
+        </div>{/* end main icon row */}
+
+        {/* ── Mobile-only: section filter row ── */}
+        <div className="flex sm:hidden items-center w-full pb-3">
+          <select
+            value={activeSectionId ?? ''}
+            onChange={(e) => handleSectionFilter(e.target.value || null)}
+            className="flex-1"
+            style={{
+              background: 'rgba(44,24,16,0.7)',
+              border: '1px solid rgba(74,44,20,0.7)',
+              color: activeSectionId ? '#D4A55A' : '#A08060',
+              borderRadius: '8px',
+              padding: '7px 28px 7px 12px',
+              fontSize: '13px',
+              fontFamily: 'var(--font-playfair)',
+              cursor: 'pointer',
+              outline: 'none',
+              appearance: 'none',
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23A08060'/%3E%3C/svg%3E")`,
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 10px center',
+            }}
+          >
+            <option value="" style={{ background: '#1C0E06' }}>All Sections</option>
+            {sections.map((s) => (
+              <option key={s.id} value={s.id} style={{ background: '#1C0E06' }}>{s.name}</option>
+            ))}
+          </select>
         </div>
       </header>
 
