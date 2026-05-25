@@ -98,7 +98,7 @@ export default function FriendsPanel({
     }
   }
 
-  // Nicknames (localStorage, client-only mount)
+  // Nicknames — seeded from localStorage for instant render, then synced from DB
   const nicknameLsKey = `shelfie_friend_nicknames_${userId}`
   const [nicknames, setNicknames] = useState<Record<string, string>>(() => {
     try {
@@ -106,6 +106,22 @@ export default function FriendsPanel({
       return stored ? JSON.parse(stored) : {}
     } catch { return {} }
   })
+
+  // On mount, pull the authoritative nicknames from the DB and merge in
+  useEffect(() => {
+    fetch('/api/friends/nicknames')
+      .then(r => r.ok ? r.json() : null)
+      .then((dbNicknames: Record<string, string> | null) => {
+        if (!dbNicknames) return
+        setNicknames(prev => {
+          const merged = { ...prev, ...dbNicknames }
+          try { localStorage.setItem(nicknameLsKey, JSON.stringify(merged)) } catch { /* ignore */ }
+          return merged
+        })
+      })
+      .catch(() => { /* ignore */ })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [nicknameInput, setNicknameInput] = useState('')
 
@@ -229,14 +245,21 @@ export default function FriendsPanel({
 
   const saveNickname = (friendUserId: string) => {
     const trimmed = nicknameInput.trim()
-    setNicknames(prev => {
-      const updated = { ...prev }
-      if (trimmed) updated[friendUserId] = trimmed
-      else delete updated[friendUserId]
-      try { localStorage.setItem(nicknameLsKey, JSON.stringify(updated)) } catch { /* ignore */ }
-      return updated
-    })
+    const updated = { ...nicknames }
+    if (trimmed) updated[friendUserId] = trimmed
+    else delete updated[friendUserId]
+
+    // Update state + localStorage immediately (optimistic)
+    setNicknames(updated)
+    try { localStorage.setItem(nicknameLsKey, JSON.stringify(updated)) } catch { /* ignore */ }
     setEditingUserId(null)
+
+    // Persist to DB in background so all devices stay in sync
+    fetch('/api/friends/nicknames', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ friend_id: friendUserId, nickname: trimmed }),
+    }).catch(() => { /* ignore — localStorage already has it */ })
   }
 
   const handleUnsend = async (recId: string) => {
