@@ -225,7 +225,7 @@ export default function BookDetailModal({
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="modal-panel relative w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl"
+        className="modal-panel relative w-full max-w-[95vw] sm:max-w-lg rounded-2xl overflow-hidden shadow-2xl"
         style={{ background: '#1C0E06', border: '1px solid #4A2C14' }}
       >
         {/* Close */}
@@ -238,11 +238,11 @@ export default function BookDetailModal({
 
         {/* ── View mode ─────────────────────────────── */}
         {!isEditing && !journalOpen && (
-          <div className="flex">
+          <div className="flex flex-col sm:flex-row">
             {/* Cover panel */}
             <div
-              className="w-36 flex-shrink-0 flex items-center justify-center"
-              style={{ background: entry.spine_color === 'cover' ? '#1C0E06' : (entry.spine_color ?? '#3B1F0E'), minHeight: '260px' }}
+              className="w-full h-44 sm:w-36 sm:h-auto flex-shrink-0 flex items-center justify-center"
+              style={{ background: entry.spine_color === 'cover' ? '#1C0E06' : (entry.spine_color ?? '#3B1F0E'), minHeight: '0' }}
             >
               {coverUrl ? (
                 <Image src={coverUrl} alt={book.title} width={144} height={220} className="w-full h-full object-cover" unoptimized />

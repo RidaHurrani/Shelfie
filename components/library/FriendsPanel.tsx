@@ -355,7 +355,7 @@ export default function FriendsPanel({
 
       {/* Panel */}
       <div
-        className="relative w-full max-w-sm h-full flex flex-col overflow-hidden"
+        className="relative w-full max-w-full sm:max-w-sm h-full flex flex-col overflow-hidden"
         style={{
           background: '#140A04',
           borderLeft: '1px solid rgba(74,44,20,0.5)',

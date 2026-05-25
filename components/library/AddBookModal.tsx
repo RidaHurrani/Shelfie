@@ -129,7 +129,7 @@ export default function AddBookModal({
       )}
 
       <div
-        className="modal-panel w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl flex flex-col"
+        className="modal-panel w-full max-w-[95vw] sm:max-w-lg rounded-2xl overflow-hidden shadow-2xl flex flex-col"
         style={{ background: '#1C0E06', border: '1px solid #4A2C14', maxHeight: '85vh' }}
       >
         {/* Search header */}

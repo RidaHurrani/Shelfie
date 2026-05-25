@@ -50,7 +50,7 @@ export default function CreateSectionModal({
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="w-full max-w-sm rounded-2xl p-6 shadow-2xl"
+        className="modal-panel w-full max-w-[95vw] sm:max-w-sm rounded-2xl p-6 shadow-2xl"
         style={{ background: '#1C0E06', border: '1px solid #4A2C14' }}
       >
         <div className="flex items-center justify-between mb-5">

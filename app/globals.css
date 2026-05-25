@@ -169,3 +169,11 @@ body {
 .library-scroll::-webkit-scrollbar-thumb:hover {
   background: #8B5E3C;
 }
+
+/* ── Mobile safety overrides ─────────────────── */
+@media (max-width: 639px) {
+  /* Modals never overflow the screen */
+  .modal-panel { max-width: 95vw !important; }
+  /* Journal textarea stays within viewport */
+  .journal-textarea { min-height: 160px !important; }
+}

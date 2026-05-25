@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#1C0E06"/>
+  <!-- Shelf plank -->
+  <rect x="64" y="340" width="384" height="24" rx="4" fill="#4A2C14"/>
+  <!-- Book 1 (tall, gold) -->
+  <rect x="100" y="180" width="52" height="160" rx="4" fill="#D4A55A"/>
+  <rect x="100" y="180" width="8" height="160" rx="2" fill="#C49040"/>
+  <!-- Book 2 (medium, brown) -->
+  <rect x="164" y="220" width="44" height="120" rx="4" fill="#6B4020"/>
+  <rect x="164" y="220" width="7" height="120" rx="2" fill="#5A3218"/>
+  <!-- Book 3 (tall, dark gold) -->
+  <rect x="220" y="170" width="56" height="170" rx="4" fill="#A08060"/>
+  <rect x="220" y="170" width="8" height="170" rx="2" fill="#8B6A4A"/>
+  <!-- Book 4 (short, warm) -->
+  <rect x="288" y="255" width="40" height="85" rx="4" fill="#8B4513"/>
+  <rect x="288" y="255" width="7" height="85" rx="2" fill="#7A3A10"/>
+  <!-- Book 5 (tall, gold accent) -->
+  <rect x="340" y="190" width="50" height="150" rx="4" fill="#D4A55A"/>
+  <rect x="340" y="190" width="8" height="150" rx="2" fill="#C49040"/>
+</svg>

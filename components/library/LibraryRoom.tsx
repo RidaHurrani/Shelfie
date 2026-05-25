@@ -58,6 +58,7 @@ export default function LibraryRoom({
   // ── Social state ─────────────────────────────────────────────────────────────
   const [showFriendsPanel, setShowFriendsPanel] = useState(false)
   const [showStatsPanel, setShowStatsPanel] = useState(false)
+  const [searchExpanded, setSearchExpanded] = useState(false) // mobile: toggle search open
   const [friends]        = useState<Friendship[]>(initialFriends)
   const [myRecs, setMyRecs] = useState<Pick<Recommendation, 'id' | 'book_id' | 'recipient_id'>[]>(initialMyRecs)
 
@@ -606,7 +607,7 @@ export default function LibraryRoom({
     <div className="min-h-screen flex flex-col" style={{ background: 'linear-gradient(180deg, #0E0804 0%, #1C1008 30%, #150D06 100%)' }}>
       {/* Header */}
       <header
-        className="flex items-center px-8 py-4 flex-shrink-0 sticky top-0 z-30 gap-6"
+        className="flex items-center px-4 sm:px-8 py-4 flex-shrink-0 sticky top-0 z-30 gap-3 sm:gap-6"
         style={{
           background: 'rgba(14,8,4,0.72)',
           backdropFilter: 'blur(20px) saturate(1.4)',
@@ -622,8 +623,8 @@ export default function LibraryRoom({
           </h1>
         </div>
 
-        {/* Search — centre */}
-        <div ref={searchRef} className="flex-1 max-w-md mx-auto relative">
+        {/* Search — hidden on mobile unless expanded; always visible sm+ */}
+        <div ref={searchRef} className={`${searchExpanded ? 'flex' : 'hidden sm:flex'} flex-1 max-w-md mx-auto relative`}>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: '#6B4020' }} />
             <input
@@ -696,24 +697,37 @@ export default function LibraryRoom({
           )}
         </div>
         {/* Right controls */}
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex items-center gap-1 sm:gap-3 flex-shrink-0 ml-auto sm:ml-0">
+
+          {/* Mobile-only: search toggle */}
+          <button
+            onClick={() => { setSearchExpanded(v => !v); if (!searchExpanded) setSearchQuery('') }}
+            className="sm:hidden p-2 transition-colors"
+            style={{ color: searchExpanded ? '#D4A55A' : '#6B4020' }}
+            title="Search"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+
+          {/* Section filter — visible on all screen sizes */}
           <select
             value={activeSectionId ?? ''}
             onChange={(e) => handleSectionFilter(e.target.value || null)}
+            className="max-w-[108px] sm:max-w-none"
             style={{
               background: 'rgba(44,24,16,0.7)',
               border: '1px solid rgba(74,44,20,0.7)',
               color: activeSectionId ? '#D4A55A' : '#A08060',
               borderRadius: '8px',
-              padding: '6px 28px 6px 12px',
-              fontSize: '13px',
+              padding: '6px 24px 6px 10px',
+              fontSize: '12px',
               fontFamily: 'var(--font-playfair)',
               cursor: 'pointer',
               outline: 'none',
               appearance: 'none',
               backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23A08060'/%3E%3C/svg%3E")`,
               backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 10px center',
+              backgroundPosition: 'right 8px center',
             }}
           >
             <option value="" style={{ background: '#1C0E06' }}>All Sections</option>
@@ -722,6 +736,8 @@ export default function LibraryRoom({
             ))}
           </select>
 
+          {/* Desktop-only: add bookcase / new section button */}
+          <div className="hidden sm:flex items-center gap-3">
           {activeSectionId ? (
             <button
               onClick={handleAddBookcase}
@@ -739,6 +755,7 @@ export default function LibraryRoom({
               New Section
             </button>
           )}
+          </div>{/* end desktop-only controls */}
           {/* Friends panel toggle */}
           <button
             onClick={() => {
