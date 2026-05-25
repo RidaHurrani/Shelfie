@@ -896,15 +896,26 @@ export default function LibraryRoom({
               <option key={s.id} value={s.id} style={{ background: '#1C0E06' }}>{s.name}</option>
             ))}
           </select>
-          {/* New Section button */}
-          <button
-            onClick={() => setShowCreateSection(true)}
-            className="flex-shrink-0 p-2 rounded-lg transition-colors"
-            style={{ background: 'rgba(44,24,16,0.7)', border: '1px solid rgba(74,44,20,0.5)', color: '#D4A55A' }}
-            title="New Section"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
+          {/* New Section / Add Bookcase button (mirrors desktop behaviour) */}
+          {activeSectionId ? (
+            <button
+              onClick={handleAddBookcase}
+              className="flex-shrink-0 p-2 rounded-lg transition-colors"
+              style={{ background: 'rgba(44,24,16,0.7)', border: '1px solid rgba(74,44,20,0.5)', color: '#D4A55A' }}
+              title="Add Bookcase"
+            >
+              <Layers className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowCreateSection(true)}
+              className="flex-shrink-0 p-2 rounded-lg transition-colors"
+              style={{ background: 'rgba(44,24,16,0.7)', border: '1px solid rgba(74,44,20,0.5)', color: '#D4A55A' }}
+              title="New Section"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </header>
 

@@ -23,6 +23,9 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Georgia, 'Times New Roman', serif;
+  /* Prevent iOS from scaling up text (which causes the initial "zoomed in" look) */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /* ── Book spine ─────────────────────────────── */
@@ -176,4 +179,7 @@ body {
   .modal-panel { max-width: 95vw !important; }
   /* Journal textarea stays within viewport */
   .journal-textarea { min-height: 160px !important; }
+  /* Prevent iOS from zooming when tapping any input/select/textarea.
+     iOS auto-zooms when font-size < 16px — this keeps it at exactly 16px on mobile. */
+  input, select, textarea { font-size: 16px !important; }
 }
