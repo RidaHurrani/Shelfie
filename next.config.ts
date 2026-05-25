@@ -1,6 +1,5 @@
 import type { NextConfig } from "next";
 import path from "path";
-// @ts-expect-error — next-pwa has no bundled types
 import withPWA from "next-pwa";
 
 const nextConfig: NextConfig = {
